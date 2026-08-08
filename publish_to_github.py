@@ -61,7 +61,13 @@ def main():
     print(f"• Branch: {BRANCH}")
     print("=" * 60)
 
-    audit_security()
+    # Remove extra notebook files if present
+    extra_nb = ROOT_DIR / "ViralCutAI_Colab_Simple.ipynb"
+    if extra_nb.exists():
+        print(f"🧹 Removing extra notebook file: {extra_nb.name}")
+        run(["git", "rm", "-f", extra_nb.name], check=False)
+        if extra_nb.exists():
+            extra_nb.unlink()
 
     # 1. Initialize Git if not present
     git_dir = ROOT_DIR / ".git"

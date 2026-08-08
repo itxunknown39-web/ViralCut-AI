@@ -2,11 +2,12 @@
 
 An AI-powered, local-first video clipping, reframing, and styled captioning toolkit.
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/itxunknown39-web/ViralCut-AI/blob/main/ViralCut_AI_Colab.ipynb)
 [![Local AI Processing](https://img.shields.io/badge/Local--First-100%25-00C9FF?style=flat-square)](#privacylocal-processing-explanation)
 [![Hardware Acceleration](https://img.shields.io/badge/Hardware%20Accel-NVENC%20%7C%20QSV%20%7C%20AMF-008BFF?style=flat-square)](#gpu-and-cpu-behavior)
 [![License Status](https://img.shields.io/badge/License-See%20Section-lightgrey?style=flat-square)](#license)
 
-ViralCut AI transforms long-form video content or YouTube links into engaging vertical Shorts and Reels with animated, creator-styled captions, visual effects, and reframed layouts — operating **entirely on your local machine** without external cloud AI subscriptions or API keys.
+ViralCut AI transforms long-form video content or YouTube links into engaging vertical Shorts and Reels with animated, creator-styled captions, visual effects, and reframed layouts — operating **entirely on your local machine** (or in a free GPU Google Colab session) without external cloud AI subscriptions or API keys.
 
 ---
 
@@ -78,8 +79,20 @@ ViralCut AI ingests a source video (from a local file upload or video URL via `y
 
 ## Real Usage Examples
 
-### 1. Web Application Interface
-Launch the server and access the interactive dashboard at `http://127.0.0.1:8000`:
+### 1. Run in Google Colab (One-Click GPU Launcher)
+
+Run ViralCut AI directly in Google Colab with free T4 GPU acceleration:
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/itxunknown39-web/ViralCut-AI/blob/main/ViralCut_AI_Colab.ipynb)
+
+1. Click the **Open In Colab** badge above.
+2. Go to **Runtime → Change runtime type → T4 GPU**.
+3. Select **Runtime → Run all**.
+4. The notebook automatically clones the repository, sets up FFmpeg and dependencies, launches the FastAPI server, and displays your temporary public Cloudflare URL (`trycloudflare.com`).
+
+---
+
+### 2. Web Application Interface (Local PC)
 ```bash
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
