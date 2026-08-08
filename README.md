@@ -1,190 +1,384 @@
 # ViralCut AI — by Kamran AI
 
-Turn any video URL into short, reframed, captioned clips — **entirely on your own
-machine**. No OpenAI/Anthropic/cloud AI calls. The only network use is:
+An AI-powered, local-first video clipping, reframing, and styled captioning toolkit.
 
-1. **yt-dlp** fetching the source video, and
-2. a **one-time** download of the whisper model weights (~1.5 GB) and the caption font.
+[![Local AI Processing](https://img.shields.io/badge/Local--First-100%25-00C9FF?style=flat-square)](#privacylocal-processing-explanation)
+[![Hardware Acceleration](https://img.shields.io/badge/Hardware%20Accel-NVENC%20%7C%20QSV%20%7C%20AMF-008BFF?style=flat-square)](#gpu-and-cpu-behavior)
+[![License Status](https://img.shields.io/badge/License-See%20Section-lightgrey?style=flat-square)](#license)
 
-After the first run, transcription and clip selection run **fully offline**.
+ViralCut AI transforms long-form video content or YouTube links into engaging vertical Shorts and Reels with animated, creator-styled captions, visual effects, and reframed layouts — operating **entirely on your local machine** without external cloud AI subscriptions or API keys.
 
 ---
 
-## Pipeline
+## Documentation Screenshots
+
+*(Place screenshot images inside the `docs/` folder to preview the dashboard interface)*
 
 ```
-URL → download (yt-dlp) → transcribe w/ word timestamps (faster-whisper)
-    → select N clips (LOCAL heuristic; optional local Ollama)
-    → per clip: cut + reframe (crop-fill | rounded 1:1 square on 9:16) + burn styled captions (ASS) via ffmpeg
-    → .mp4 + preview/download URLs
+docs/
+├── dashboard.png
+├── generation.png
+└── captions.png
 ```
 
-## Requirements
+---
 
-- **Python 3.11+**
-- **ffmpeg on your PATH** — this does the cutting, reframing, and caption burning.
-  Without it, nothing renders.
-  - Windows: `winget install Gyan.FFmpeg`
-  - macOS: `brew install ffmpeg`
-  - Linux: `sudo apt install ffmpeg`
-- **GPU (recommended):** NVIDIA + CUDA 12 + matching cuDNN for faster-whisper.
-  The app **auto-detects** the GPU and falls back to CPU automatically. You can
-  also force the device per run from the UI **Compute** selector (**Auto / GPU /
-  CPU**); the GPU option is disabled automatically when no CUDA GPU is detected.
+## Short Feature Overview
 
-> **No API keys. No `.env`. Nothing to configure.**
+- 🔒 **100% Local-First Processing**: No OpenAI, Anthropic, or external API keys required. All speech recognition, clip analysis, and rendering occur locally.
+- ⚡ **Hardware Accelerated Rendering**: Automatic detection and utilization of NVIDIA NVENC (`h264_nvenc`), Intel QSV (`h264_qsv`), or AMD AMF (`h264_amf`) GPU encoders, with an optimized multi-threaded CPU fallback (`libx264`).
+- 🎙️ **Word-Level AI Transcription**: Powered by `faster-whisper` and CTranslate2 with VAD (Voice Activity Detection) and automatic language detection (with Hinglish transliteration support).
+- 🧠 **Intelligent Local Virality Selector**: Heuristic clip analysis scoring density of speech, hook keywords, sentence completeness, and target duration (optional local Ollama integration).
+- 🎨 **18 Creator Caption Presets**: Built-in ASS subtitle builder supporting Hormozi-style active word highlighting, MrBeast Pop, Karaoke Yellow, Boxed TikTok, Word Reveal, and custom font uploads.
+- 📐 **Smart Reframing & Aspect Ratios**: Native 9:16 vertical Shorts/Reels output with blurred background + sharp foreground, or "Rounded Reel" mode (1:1 rounded square on 9:16 canvas).
+- 🎵 **Reels-Style Audio Mixing & Ducking**: Background music integration with automatic sidechain compression that ducks music under voice speech.
+- 🎬 **Cinematic Video Effects**: Color grading presets (Teal & Orange, Warm, Cool, Vintage), smooth highlights glow bloom, film grain, vignette, and gradient scrims.
 
-## Setup
+---
 
-### Windows (PowerShell)
+## What the Application Does
+
+ViralCut AI ingests a source video (from a local file upload or video URL via `yt-dlp`), transcribes the audio track to generate precise word-level timestamps, analyzes the transcript to select optimal highlight windows, reframes the video to 9:16 or 16:9 formats, burns styled ASS captions into the video stream, applies optional cinematic effects and background audio ducking, and exports production-ready `.mp4` clips.
+
+---
+
+## Input → Processing → Output Workflow
+
+```
+[ Input Source ]
+  ├── YouTube / Video URL (yt-dlp)
+  └── Local File Upload (.mp4, .mov, .mkv)
+         │
+         ▼
+[ Local Speech Recognition ]
+  └── faster-whisper (Word-Level Timestamps + Language Detection)
+         │
+         ▼
+[ Highlight Window Analysis ]
+  └── Local Heuristic Selector (Speech Density + Hooks + Completeness)
+         │
+         ▼
+[ Subtitle & Graphic Generation ]
+  └── ASS Subtitle Builder (Creator Presets + Word Highlighting + Custom Fonts)
+         │
+         ▼
+[ FFmpeg Reframing & Render Engine ]
+  ├── Crop / Reframing (9:16 Vertical Canvas)
+  ├── Cinematic Effects (Glow + Gradients + Color Grades)
+  ├── Audio Sidechain Ducking (Background Music)
+  └── GPU Encoder (NVENC / QSV / AMF / CPU Fallback)
+         │
+         ▼
+[ Output Distribution ]
+  ├── Individual Rendered .mp4 Clips
+  └── Real-Time Web Dashboard Preview & Download
+```
+
+---
+
+## Real Usage Examples
+
+### 1. Web Application Interface
+Launch the server and access the interactive dashboard at `http://127.0.0.1:8000`:
+```bash
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+### 2. Python Pipeline API Execution
+Execute the pipeline programmatically in Python:
+```python
+from app.downloader import download_video
+from app.transcriber import transcribe_video
+from app.selector import select_clips
+from app.captions import build_ass
+from app.clipper import generate_clip, ClipOptions
+from app.models import AspectRatio, FitMode
+from pathlib import Path
+
+# 1. Download source video
+source_path = download_video("https://www.youtube.com/watch?v=EXAMPLE")
+
+# 2. Transcribe locally with Whisper
+transcript = transcribe_video(source_path, clip_id="job_001", device="auto")
+
+# 3. Select highlight clips
+windows = select_clips(transcript, num_clips=3, clip_length=30.0)
+
+# 4. Render clips
+for idx, win in enumerate(windows):
+    ass_path = Path(f"clips/job_001/{idx}.ass")
+    build_ass(
+        words=[w for w in transcript["words"] if win["start"] <= w["start"] <= win["end"]],
+        style_preset="hormozi_green",
+        video_w=1080,
+        video_h=1920,
+        out_path=ass_path,
+        clip_start=win["start"]
+    )
+    
+    opts = ClipOptions(
+        aspect_ratio=AspectRatio.NINE_16,
+        fit_mode=FitMode.CROP,
+        ass_path=ass_path,
+        clip_id="job_001",
+        index=idx
+    )
+    output_mp4 = generate_clip(source_path, win["start"], win["end"], opts)
+    print(f"Rendered clip {idx + 1}: {output_mp4}")
+```
+
+### 3. Pipeline Performance Benchmark
+Run the built-in benchmark script to measure real elapsed wall-clock processing time:
+```bash
+python benchmark_pipeline.py
+```
+
+---
+
+## Supported Aspect Ratios & Fit Modes
+
+| Mode | Canvas Resolution | Aspect Ratio | Layout Behavior |
+| :--- | :--- | :--- | :--- |
+| **9:16 Vertical Crop** | 1080 x 1920 | 9:16 | Centers and crops the source video to cover the vertical canvas. |
+| **16:9 Landscape** | 1920 x 1080 | 16:9 | Maintains original landscape widescreen dimensions. |
+| **9:16 Square Reel** | 1080 x 1920 | 9:16 | Renders a 1:1 rounded square video container (1020x1020) centered on a 9:16 canvas with soft anti-aliased corners and optional top title text. |
+
+---
+
+## Creator Caption Presets
+
+ViralCut AI includes 18 built-in caption presets configured for short-form video engagement:
+
+| Preset Key | Preset Name | Animation / Style Features |
+| :--- | :--- | :--- |
+| `bold_white` | Bold White | Clean bold white text with black outline. |
+| `karaoke_yellow` | Karaoke Yellow | Syllable-by-syllable karaoke color fill. |
+| `hormozi_green` | Hormozi Green | Active word highlight in neon green (`#27E36B`) on Montserrat. |
+| `hormozi_yellow` | Hormozi Yellow | Active word highlight in vivid yellow (`#FFD400`) on Montserrat. |
+| `beast_red` | Beast Pop | Heavy pop typography with bright red highlight on Anton. |
+| `one_word_punch` | One-Word Punch | Single word display at a time with pop-in scaling animation. |
+| `word_reveal` | Word Reveal | Progressive fade & scale-in reveal per word. |
+| `boxed_tiktok` | Boxed TikTok | Dark semi-transparent background box behind text. |
+| `comic_bangers` | Comic Punch | Comic-book styled yellow and white typography on Bangers. |
+| `serif_elegant` | Serif Elegant | Elegant classic editorial typography on DM Serif Display. |
+
+---
+
+## GPU and CPU Behavior
+
+ViralCut AI automatically detects and utilizes available hardware acceleration for both speech recognition and video encoding:
+
+- **Whisper Speech Recognition (`faster-whisper`)**:
+  - **GPU (`cuda`)**: Uses NVIDIA CUDA with `float16` compute precision when a CUDA GPU is present.
+  - **CPU (`cpu`)**: Falls back to CPU execution with quantized `int8` precision.
+- **FFmpeg Video Encoding**:
+  - Probes system hardware before rendering and selects the fastest available encoder:
+    1. **NVIDIA NVENC**: `h264_nvenc`
+    2. **Intel QSV**: `h264_qsv`
+    3. **AMD AMF**: `h264_amf`
+    4. **CPU Fallback**: `libx264` (with `-preset ultrafast -threads 0` multi-threading).
+
+---
+
+## Installation Guide
+
+### Prerequisites
+- **Python**: 3.10, 3.11, or 3.12
+- **Node.js** (Optional, only for rebuilding the frontend): 18.x or higher
+- **FFmpeg**: Required on system PATH
+
+### Installing FFmpeg
+
+#### Windows
 ```powershell
-cd ai-video-clipper
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+winget install Gyan.FFmpeg
 ```
 
-### macOS / Linux
+#### macOS
 ```bash
-cd ai-video-clipper
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+brew install ffmpeg
 ```
 
-## Run
-
+#### Linux (Ubuntu/Debian)
 ```bash
-uvicorn app.main:app --reload
+sudo apt update && sudo apt install -y ffmpeg
 ```
 
-Then open **http://127.0.0.1:8000**.
+### Installation Steps
 
-On first start the app downloads the whisper `medium` model and the Roboto caption
-font once, loads the model on CUDA (or CPU), and is then ready.
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/itxunknown39-web/ViralCut-AI.git
+   cd ViralCut-AI
+   ```
 
-## Using it
+2. **Create and activate a Python virtual environment**:
+   ```bash
+   # Windows
+   python -m venv .venv
+   .venv\Scripts\activate
 
-1. Choose a **Video source** — **Paste link** (a URL) or **Upload file** (drag &
-   drop or pick a video from your machine; a status line shows upload progress).
-2. Choose aspect ratio (**9:16** default / 16:9).
-3. Choose fit mode — **Crop (fill)** (uses the aspect ratio above) or **1:1 Square**
-   (a **9:16** reel with the video cropped to a **rounded 1:1 square centered on
-   black**, a **Title** drawn above it, and captions below — **ignores the aspect
-   ratio**).
-4. Set the number of clips (1–10).
-5. Choose **Compute** — **Auto** (GPU if available, else CPU), **GPU**, or **CPU**.
-6. Pick a caption style — the **live preview** shows how captions will look.
-7. Click **Generate Shorts**. A **live progress bar** tracks each stage
-   (download → transcribe → analyze → render); clips appear as soon as each one
-   finishes rendering.
+   # macOS / Linux
+   python3 -m venv .venv
+   source .venv/bin/activate
+   ```
 
-## API
+3. **Install Python dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-The pipeline runs **asynchronously** so the UI can show live progress.
+---
 
-- `POST /api/upload` — upload a video file (`multipart/form-data`, field `file`).
-  Returns `{ "status":"ok", "upload_id":"…", "filename":"…", "ext":".mp4" }`. The
-  file is streamed to `downloads/` and referenced by `upload_id` in the next call.
-  Unsupported types or empty files return HTTP 400 with a readable message.
-- `POST /api/generate` — start a job. Body:
-  ```json
-  {
-    "video_url": "https://…",
-    "upload_id": null,
-    "aspect_ratio": "9:16",
-    "fit_mode": "crop",
-    "bar_text": null,
-    "num_clips": 3,
-    "caption_style": "bold_white",
-    "device": "auto"
-  }
-  ```
-  Supply **either** `video_url` **or** `upload_id` (from `/api/upload`) — at least
-  one is required (HTTP 422 otherwise); `upload_id` wins if both are sent. `device`
-  is one of `auto` | `cuda` | `cpu` (default `auto`). Returns `{ "job_id": "…" }`
-  immediately — the work runs on a background thread.
-- `GET /api/progress/{job_id}` — **Server-Sent Events** stream of progress
-  snapshots until the job finishes. Each event is JSON:
-  ```json
-  {
-    "status": "running|done|error",
-    "stage": "downloading|transcribing|selecting|rendering|done",
-    "progress": 0.0,
-    "message": "Transcribing... 42%",
-    "clips": [{ "index": 0, "title": "…", "start": 0.0, "end": 30.0, "url": "/clips/…/0.mp4" }],
-    "error": null
-  }
-  ```
-  Finished clips appear in `clips` as soon as each one renders.
-- `GET /api/result/{job_id}` — one-shot snapshot of a job (used by the UI to
-  recover if the SSE stream drops). Bad input surfaces as `status:"error"` with a
-  readable `message` — the server never crashes.
-- `GET /api/history` — all past generations and their clips, newest first (powers
-  the **My Clips** panel; persisted in `clips/history.json` so it survives restarts).
-- `DELETE /api/clip/{clip_id}/{index}` — remove one generated clip (deletes the
-  file and drops it from history).
-- `POST /api/reveal` — body `{ "clip_id": "…", "index": 0 }`; opens that clip's
-  folder in the OS file manager with the file selected (local-only convenience).
-- `GET /api/caption-styles` — caption presets for the UI.
-- `GET /api/devices` — `{"devices":["cuda","cpu"],"default":"cuda","cuda_available":true}`
-  — what the Compute selector offers and whether a GPU is present.
-- `POST /api/warmup?device=auto|cuda|cpu` — load the Whisper model on that device
-  and report readiness: `{"status":"ready","device":"cuda","cached":true}` (or
-  `{"status":"error","message":"…"}`). The UI calls this when the Compute dropdown
-  changes to show a live loading/ready status.
-- `GET /health` — `{"status":"ok","device":"cuda|cpu"}`.
+## First-Run Behavior
 
-## Caption styles
+On the initial execution:
+1. **Directory Structure Setup**: Automatically creates runtime workspace directories (`downloads/`, `transcripts/`, `clips/`, `assets/fonts/`, `assets/masks/`, `assets/music/`).
+2. **Core Font Provisioning**: Downloads standard Google Fonts (Roboto, Montserrat, Anton, Poppins, etc.) into `assets/fonts/`.
+3. **Whisper Model Initialization**: Downloads the `medium` Whisper model weights (~1.5 GB) on first transcription request and caches them locally.
 
-Defined once in `app/captions.py` and used for **both** the UI preview and the burned-in
-ASS render, so what you preview matches what you get:
+---
 
-- **bold_white** — big bold white text, black outline, bottom-center.
-- **karaoke_yellow** — white text, current word highlighted yellow (per-word timing).
-- **minimal** — clean smaller white text, subtle shadow, bottom.
+## Usage Guide
 
-## Clip selection is a local heuristic (be honest)
+### Running the Web Server
+Launch the FastAPI application server:
+```bash
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+Open `http://127.0.0.1:8000` in your web browser.
 
-`app/selector.py` is **not** cloud "AI virality" detection. It builds candidate windows
-(~20–45s) aligned to transcript segments and scores them with simple local signals:
-word density, sentence completeness, questions / strong-statement words, and length fit,
-then picks the top non-overlapping windows.
+### Bypassing YouTube Cookie Requirements
+If YouTube requires sign-in verification for a video:
+1. Export a Netscape format `cookies.txt` file from your browser.
+2. Upload `cookies.txt` in the UI settings or place it in the application root, or set the environment variable:
+   ```bash
+   export VIRALCUT_COOKIES_FILE="/path/to/cookies.txt"
+   ```
 
-**Optional local Ollama** (off by default): if you run [Ollama](https://ollama.com) locally,
-set `USE_OLLAMA=1` (and optionally `OLLAMA_MODEL=llama3`) to have a **local** model score and
-title the windows. Still zero external API calls — Ollama runs on `localhost`.
+---
+
+## API Documentation
+
+FastAPI provides an interactive OpenAPI document at `http://127.0.0.1:8000/docs`.
+
+### Key Endpoints
+
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/health` | GET | Returns server health status and active compute device. |
+| `/api/devices` | GET | Reports available compute devices (CUDA/CPU) and GPU name. |
+| `/api/caption-styles` | GET | Returns available caption style presets for UI preview. |
+| `/api/upload` | POST | Uploads a local video file (`multipart/form-data`). |
+| `/api/prefetch` | POST | Starts background pre-downloading of a video URL. |
+| `/api/pretranscribe` | POST | Starts background pre-transcription of a video file. |
+| `/api/generate` | POST | Submits a clip generation job and returns a `job_id`. |
+| `/api/progress/{job_id}`| GET | Server-Sent Events (SSE) endpoint streaming real-time progress. |
+| `/api/history` | GET | Retrieves past clip generation records. |
+
+---
+
+## Project Structure
+
+```
+ViralCut-AI/
+├── app/                        # Backend Python Application
+│   ├── main.py                 # FastAPI application routes & lifecycle
+│   ├── jobs.py                 # Asynchronous job queue & SSE progress runner
+│   ├── downloader.py           # yt-dlp downloader & cookie validation
+│   ├── transcriber.py          # faster-whisper model loader & transcription
+│   ├── selector.py             # Local heuristic clip window selection
+│   ├── captions.py             # ASS subtitle builder & caption presets
+│   ├── clipper.py              # FFmpeg video reframing & render pipeline
+│   ├── effects.py              # Cinematic filtergraph effects
+│   ├── models.py               # Pydantic data schemas
+│   ├── fonts.py                # Font manager
+│   ├── history.py              # History manager
+│   └── paths.py                # Workspace directory paths
+├── web/                        # React / Vite Web Frontend
+│   ├── src/                    # UI Components & Pages
+│   │   ├── App.jsx             # Main Shell & Sidebar
+│   │   ├── pages/Create.jsx    # Clip Creation Workflow Page
+│   │   └── styles.css          # Design System Stylesheet (#00C9FF cyan theme)
+│   └── dist/                   # Production Web Assets
+├── static/                     # Legacy static fallback UI
+├── docs/                       # Documentation screenshots
+├── benchmark_pipeline.py       # Performance benchmark utility
+├── publish_to_github.py        # Automated publishing & security audit script
+├── requirements.txt            # Python dependencies
+└── README.md                   # Repository documentation
+```
+
+---
+
+## Privacy / Local-Processing Explanation
+
+ViralCut AI is designed as a **local-first** application. Your media files, transcripts, and generated video content are processed entirely on your machine:
+- No video or audio bytes are sent to third-party cloud AI vendors.
+- Transcription is performed locally via `faster-whisper` CTranslate2 models.
+- Video reframing and subtitle burning occur locally using FFmpeg.
+
+---
 
 ## Troubleshooting
 
-- **`Unable to load libcudnn…` / CUDA errors:** the most common GPU issue is a cuDNN
-  version mismatch. Install CUDA 12 + the matching cuDNN, or just let it fall back to CPU
-  (slower on `medium`). See the
-  [faster-whisper docs](https://github.com/SYSTRAN/faster-whisper#gpu).
-- **`ffmpeg was not found on PATH`:** install ffmpeg (see Requirements) and reopen the shell.
-- **First run is slow:** it's downloading the ~1.5 GB model once. Subsequent runs are fast.
+### 1. `ffmpeg was not found on PATH`
+Ensure FFmpeg is installed and accessible in your system terminal by running `ffmpeg -version`.
 
-## Project layout
+### 2. CUDA / cuBLAS DLL Missing on Windows
+If `cublas64_12.dll` or `cudnn64_9.dll` is missing, ensure NVIDIA CUDA Toolkit 12 and matching cuDNN libraries are installed, or switch the compute device dropdown to `CPU`.
 
-```
-ai-video-clipper/
-├── app/
-│   ├── main.py         # FastAPI app: lifespan model load, job + SSE endpoints
-│   ├── jobs.py         # background job model + live progress pipeline runner
-│   ├── models.py       # Pydantic schemas + enums + exceptions
-│   ├── paths.py        # central directory layout
-│   ├── downloader.py   # yt-dlp download
-│   ├── uploads.py      # save/resolve user-uploaded video files
-│   ├── history.py      # persistent clip history (My Clips panel)
-│   ├── transcriber.py  # faster-whisper (auto GPU→CPU)
-│   ├── selector.py     # local heuristic clip selection (+ Ollama scaffold)
-│   ├── captions.py     # ASS builder + style presets (single source of truth)
-│   ├── clipper.py      # ffmpeg cut / reframe / caption burn
-│   └── fonts.py        # one-time caption font download
-├── assets/fonts/       # Roboto (auto-fetched)
-├── assets/masks/       # rounded-corner mask for square mode (auto-generated)
-├── static/index.html   # vanilla frontend
-├── downloads/  transcripts/  clips/   # auto-created, gitignored
-├── requirements.txt
-└── README.md
-```
+### 3. YouTube Sign-in / Bot Verification Error
+If yt-dlp encounters a YouTube bot check:
+- Provide a `cookies.txt` file via the upload option or set `VIRALCUT_COOKIES_FILE`.
+- Ensure `yt-dlp` is updated to the latest release (`pip install -U yt-dlp`).
+
+---
+
+## Performance Considerations
+
+- **GPU Acceleration**: NVIDIA NVENC encoding renders 1080p clips in seconds compared to CPU encoding.
+- **Glow Bloom Optimization**: Highlight bloom blurring is performed at half-resolution before screening, providing a 4x speedup.
+- **Gradient Scrim Optimization**: Gradient dark scrims use 8 smoothstep bands to eliminate unnecessary filter graph evaluation overhead.
+
+---
+
+## Roadmap
+
+- [ ] Dynamic multi-speaker speaker diarization.
+- [ ] Auto-tracking facial crop centering for dynamic speaker framing.
+- [ ] Custom ASS subtitle animation timeline editor.
+- [ ] Batch folder import for bulk video clipping.
+
+---
+
+## Contributing
+
+Contributions, bug reports, and feature requests are welcome. Please open an issue or submit a pull request on GitHub.
+
+1. Fork the repository.
+2. Create a feature branch (`git checkout -b feature/amazing-feature`).
+3. Commit your changes (`git commit -m 'Add amazing feature'`).
+4. Push to the branch (`git push origin feature/amazing-feature`).
+5. Open a Pull Request.
+
+---
+
+## Credits & Attribution
+
+ViralCut AI integrates and builds upon open-source software libraries and frameworks:
+
+- **[yt-dlp](https://github.com/yt-dlp/yt-dlp)**: Video fetching and Netscape cookie parsing engine.
+- **[faster-whisper](https://github.com/SYSTRAN/faster-whisper)**: CTranslate2 reimplementation of OpenAI's Whisper model.
+- **[FFmpeg](https://ffmpeg.org/)**: Multimedia framework for video scaling, filtering, subtitle burning, and encoding.
+- **[indic-transliteration](https://github.com/indic-transliteration/indic_transliteration_py)**: Transliteration utilities for Hindustani/Hinglish text support.
+- **[FastAPI](https://fastapi.tiangolo.com/)**: High-performance web framework for Python APIs.
+- **[React](https://react.dev/) & [Vite](https://vitejs.dev/)**: Web UI frontend framework and bundler.
+
+*Notice: ViralCut AI is an independent open-source project and is not affiliated with OpenAI, Google, or YouTube.*
+
+---
+
+## License
+
+Users should review the repository's licensing status and third-party dependency licenses (such as LGPL/GPL for FFmpeg and MIT/Apache-2.0 for Python libraries) when distributing or modifying this software.
