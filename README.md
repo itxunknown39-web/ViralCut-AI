@@ -4,9 +4,10 @@ An AI-powered, local-first video clipping, reframing, and styled captioning tool
 
 [![Local AI Processing](https://img.shields.io/badge/Local--First-100%25-00C9FF?style=flat-square)](#privacylocal-processing-explanation)
 [![Hardware Acceleration](https://img.shields.io/badge/Hardware%20Accel-NVENC%20%7C%20QSV%20%7C%20AMF-008BFF?style=flat-square)](#gpu-and-cpu-behavior)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/itxunknown39-web/ViralCut-AI/blob/main/ViralCut_AI_Colab.ipynb)
 [![License Status](https://img.shields.io/badge/License-See%20Section-lightgrey?style=flat-square)](#license)
 
-ViralCut AI transforms long-form video content or YouTube links into engaging vertical Shorts and Reels with animated, creator-styled captions, visual effects, and reframed layouts — operating **entirely on your local machine** without external cloud AI subscriptions or API keys.
+ViralCut AI transforms long-form video content or YouTube links into engaging vertical Shorts and Reels with animated, creator-styled captions, visual effects, and reframed layouts — operating **entirely on your local machine** or inside [Google Colab](https://colab.research.google.com/github/itxunknown39-web/ViralCut-AI/blob/main/ViralCut_AI_Colab.ipynb) without external cloud AI subscriptions or API keys.
 
 ---
 
