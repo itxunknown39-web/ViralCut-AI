@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import sys
 import uuid
 from pathlib import Path
 from typing import Callable, Optional
@@ -57,14 +58,17 @@ def _is_terminal(reason: str) -> bool:
 # YouTube player clients to fall back through. Different clients are served by
 # different endpoints, and the cookie-free mobile/TV ones frequently slip past
 # the "confirm you're not a bot" wall the default web client trips.
-_PLAYER_CLIENTS = ["android", "ios", "tv", "mweb"]
+_PLAYER_CLIENTS = ["android", "ios", "mweb", "tv", "web_creator"]
+
+
 def _download_attempts(base_opts: dict) -> list[tuple[str, dict]]:
     """Ordered (label, ydl_opts) attempts.
 
     Order is cheapest-and-most-likely first:
       1. explicit cookies file or forced browser (only if configured by user/env),
       2. the plain default pass (fast for public videos),
-      3. cookie-free alternate YouTube player clients (dodge the bot wall: android, ios, tv, mweb).
+      3. cookie-free alternate YouTube player clients (android, ios, mweb, tv, web_creator),
+      4. browser cookies as a last-resort fallback on Windows/desktop (skipped on Colab/Linux).
     """
     cookie_file = os.environ.get("VIRALCUT_COOKIES_FILE") or os.environ.get(_COOKIE_FILE_ENV)
     forced = os.environ.get("VIRALCUT_COOKIES_BROWSER") or os.environ.get(_COOKIE_BROWSER_ENV)
@@ -83,6 +87,12 @@ def _download_attempts(base_opts: dict) -> list[tuple[str, dict]]:
             f"{client} client",
             {**base_opts, "extractor_args": {"youtube": {"player_client": [client]}}},
         ))
+
+    # Auto-try desktop browser cookies only when on Windows/desktop PC where browser profile databases exist,
+    # avoiding unnecessary missing browser database probing/errors on headless Linux/Colab.
+    if not forced and sys.platform == "win32":
+        for b in _DEFAULT_BROWSERS:
+            attempts.append((f"{b} cookies", {**base_opts, "cookiesfrombrowser": (b,)}))
 
     return attempts
 
