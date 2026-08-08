@@ -22,6 +22,38 @@ const THEMES = [
   { id: "light", label: "Light" },
 ];
 
+// First-run (and every relaunch, briefly) splash while the whisper model
+// loads. On a fresh install this can take a few minutes to download — this
+// screen is the fix for that looking "stuck": real progress instead of a
+// refused connection or a blank tab.
+function ModelSplash({ status }) {
+  const pct = status.progress != null ? Math.round(status.progress * 100) : null;
+  const failed = status.status === "error";
+  return (
+    <div className="model-splash">
+      <div className="model-splash-mark"><Icons.bolt /></div>
+      <div className="model-splash-title">ViralCut AI</div>
+      {failed ? (
+        <>
+          <div className="model-splash-msg" style={{ color: "var(--danger)" }}>Could not start the AI engine.</div>
+          <div className="model-splash-detail">{status.message}</div>
+          <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => window.location.reload()}>Retry</button>
+        </>
+      ) : (
+        <>
+          <div className="model-splash-msg">{status.message || "Starting up…"}</div>
+          <div className="track model-splash-track">
+            <div className={"fill" + (pct == null ? " indeterminate" : "")} style={pct == null ? {} : { width: pct + "%" }} />
+          </div>
+          {status.status === "downloading" && (
+            <div className="model-splash-detail">One-time download — this machine won't need it again.</div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // Segmented light/dark switch. Writes the choice to <html data-theme> and
 // remembers it across reloads. "dark" is the CSS default, so we clear the attr.
 function ThemeSwitch({ theme, setTheme, fixed }) {
@@ -41,6 +73,7 @@ export default function App() {
   const [device, setDevice] = useState(null);
   const [online, setOnline] = useState(null);
   const [navOpen, setNavOpen] = useState(false);
+  const [modelStatus, setModelStatus] = useState(null); // null = unknown; { status, message, progress } while loading
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem("cf-theme") || "dark"; } catch { return "dark"; }
   });
@@ -52,14 +85,25 @@ export default function App() {
     try { localStorage.setItem("cf-theme", theme); } catch { /* ignore */ }
   }, [theme]);
 
+  // Poll health; also surfaces model-loading progress on first boot.
   useEffect(() => {
     let alive = true;
     const ping = () =>
       api.health()
-        .then((d) => { if (alive) { setOnline(true); setDevice(d.device); } })
-        .catch(() => { if (alive) setOnline(false); });
+        .then((d) => {
+          if (!alive) return;
+          setOnline(true);
+          setDevice(d.device);
+          // model_status is included by the backend once Whisper is loading/ready
+          if (d.model_status && d.model_status.status !== "ready") {
+            setModelStatus(d.model_status);
+          } else {
+            setModelStatus(null); // clear splash once ready
+          }
+        })
+        .catch(() => { if (alive) { setOnline(false); } });
     ping();
-    const t = setInterval(ping, 8000);
+    const t = setInterval(ping, 4000);
     return () => { alive = false; clearInterval(t); };
   }, []);
 
@@ -70,6 +114,11 @@ export default function App() {
   const t = TITLES[page];
 
   const go = (id) => { setPage(id); if (id === "create") setStep(1); setNavOpen(false); };
+
+  // Show model splash while AI engine is loading
+  if (modelStatus && modelStatus.status !== "ready") {
+    return <ModelSplash status={modelStatus} />;
+  }
 
   return (
     <div className={"shell" + (chromeless ? " is-landing" : "") + (navOpen ? " nav-open" : "")}>

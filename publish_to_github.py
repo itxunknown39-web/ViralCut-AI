@@ -12,7 +12,7 @@ from pathlib import Path
 
 REMOTE_URL = "https://github.com/itxunknown39-web/ViralCut-AI.git"
 BRANCH = "main"
-COMMIT_MSG = "Initial release: ViralCut AI"
+COMMIT_MSG = "feat: complete source-code migration to reference 7-screen wizard UI and downloader"
 
 ROOT_DIR = Path(__file__).parent.resolve()
 

@@ -54,6 +54,13 @@ export const api = {
     if (!r.ok) throw new Error(d.detail || "Font upload failed.");
     return d; // { family, file }
   },
+  // Returns the URL of the uncropped source segment for a rendered clip.
+  // Used by ReframeEditor to load the full-frame video before keyframing.
+  clipSourceUrl: (jobId, clipIndex) => `/api/clip/${jobId}/${clipIndex}/source`,
+
+  // Re-render a single clip with new reframe keyframes.
+  rerender: (jobId, clipIndex, keyframes) => jpost(`/api/clip/${jobId}/${clipIndex}/rerender`, { keyframes }),
+
   upload: async (file, onProgress) =>
     new Promise((resolve, reject) => {
       const fd = new FormData();
