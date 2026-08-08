@@ -62,16 +62,15 @@ def _download_attempts(base_opts: dict) -> list[tuple[str, dict]]:
     """Ordered (label, ydl_opts) attempts.
 
     Order is cheapest-and-most-likely first:
-      1. explicit cookies (only if the user configured a file/browser),
+      1. explicit cookies file or forced browser (only if configured by user/env),
       2. the plain default pass (fast for public videos),
-      3. cookie-free alternate YouTube player clients (dodge the bot wall),
-      4. browser cookies (needs the browser closed on Windows) as a last resort.
+      3. cookie-free alternate YouTube player clients (dodge the bot wall: android, ios, tv, mweb).
     """
     cookie_file = os.environ.get("VIRALCUT_COOKIES_FILE") or os.environ.get(_COOKIE_FILE_ENV)
     forced = os.environ.get("VIRALCUT_COOKIES_BROWSER") or os.environ.get(_COOKIE_BROWSER_ENV)
 
     attempts: list[tuple[str, dict]] = []
-    if cookie_file:
+    if cookie_file and os.path.exists(cookie_file):
         attempts.append(("cookies file", {**base_opts, "cookiefile": cookie_file}))
     if forced:
         b = forced.strip().lower()
@@ -84,10 +83,6 @@ def _download_attempts(base_opts: dict) -> list[tuple[str, dict]]:
             f"{client} client",
             {**base_opts, "extractor_args": {"youtube": {"player_client": [client]}}},
         ))
-
-    if not forced:  # auto-try common browsers unless the user pinned one
-        for b in _DEFAULT_BROWSERS:
-            attempts.append((f"{b} cookies", {**base_opts, "cookiesfrombrowser": (b,)}))
 
     return attempts
 
