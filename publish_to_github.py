@@ -61,6 +61,31 @@ def main():
     print(f"• Branch: {BRANCH}")
     print("=" * 60)
 
+    # Build React frontend if Node/npm is present and sync to static/
+    web_dir = ROOT_DIR / "web"
+    dist_dir = web_dir / "dist"
+    static_dir = ROOT_DIR / "static"
+    if (web_dir / "package.json").exists():
+        print("🔨 Building React dashboard (web/)...")
+        b_res = subprocess.run("npm run build", cwd=str(web_dir), shell=True, capture_output=True, text=True)
+        if b_res.returncode == 0:
+            print("✅ React build succeeded.")
+        else:
+            print("⚠️ npm run build note:", b_res.stderr.strip() or b_res.stdout.strip())
+            
+    if dist_dir.exists():
+        import shutil
+        print("🔄 Synchronizing web/dist -> static/ ...")
+        static_dir.mkdir(parents=True, exist_ok=True)
+        if (dist_dir / "index.html").exists():
+            shutil.copy2(dist_dir / "index.html", static_dir / "index.html")
+        if (dist_dir / "assets").exists():
+            st_assets = static_dir / "assets"
+            if st_assets.exists():
+                shutil.rmtree(st_assets)
+            shutil.copytree(dist_dir / "assets", st_assets)
+        print("✅ static/ folder synchronized with web/dist.")
+
     # Remove extra notebook files if present
     extra_nb = ROOT_DIR / "ViralCutAI_Colab_Simple.ipynb"
     if extra_nb.exists():

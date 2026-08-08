@@ -68,6 +68,8 @@ app.mount("/music", StaticFiles(directory=str(MUSIC_DIR)), name="music")
 # production build exists, so the backend can serve the React app at "/" directly.
 if (WEB_DIST_DIR / "assets").is_dir():
     app.mount("/assets", StaticFiles(directory=str(WEB_DIST_DIR / "assets")), name="assets")
+elif (STATIC_DIR / "assets").is_dir():
+    app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
 
 
 @app.get("/health")
