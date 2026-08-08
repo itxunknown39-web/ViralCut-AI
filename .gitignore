@@ -1,0 +1,49 @@
+# Generated / large artifacts
+downloads/
+transcripts/
+clips/
+content/
+exports/
+
+# Video & Media output files
+*.mp4
+*.mkv
+*.webm
+*.avi
+*.mov
+*.zip
+
+# Sensitive files & Cookies
+*cookie*.txt
+cookies.txt
+.env
+*.env
+*.pem
+*.key
+
+# Bundled fonts & generated masks (auto-created/downloaded on first run)
+assets/fonts/*.ttf
+assets/masks/*.png
+
+# Node / Web dependencies & builds
+node_modules/
+web/node_modules/
+remotion-spike/node_modules/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Model cache (faster-whisper / huggingface)
+*.bin
+.cache/
+models/
+
+# OS / Runtime logs
+.DS_Store
+Thumbs.db
+*.log
+assets/music/
