@@ -78,9 +78,21 @@ def resolve_upload(upload_id: str) -> Path:
     """
     if not upload_id or not _ID_RE.match(upload_id):
         raise InvalidVideoURLError("Invalid upload reference.")
-    matches = sorted(DOWNLOADS_DIR.glob(f"{upload_id}.*"))
+
+    # Explicitly filter out temporary files (.part, .ytdl, .temp, etc.) and restrict to allowed media extensions
+    all_candidates = list(DOWNLOADS_DIR.glob(f"{upload_id}.*"))
+    matches = sorted([
+        p for p in all_candidates
+        if p.is_file()
+        and p.stat().st_size > 0
+        and not p.name.lower().endswith((".part", ".ytdl", ".temp", ".tmp"))
+        and ".part" not in p.name.lower()
+        and p.suffix.lower() in ALLOWED_EXTS
+    ])
+
     if not matches:
         raise InvalidVideoURLError(
-            "The uploaded file could not be found. Please upload it again."
+            "The uploaded file could not be found or download was incomplete. Please upload or download it again."
         )
     return matches[0]
+

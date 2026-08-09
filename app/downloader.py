@@ -145,19 +145,61 @@ def probe_source_info(filepath: Path) -> dict:
     return {}
 
 
+def _is_temp_file(path: Path) -> bool:
+    """True if path points to a temporary download file (.part, .ytdl, etc.)."""
+    name_lower = path.name.lower()
+    return (
+        name_lower.endswith((".part", ".ytdl", ".temp", ".tmp"))
+        or ".part-frag" in name_lower
+        or ".part." in name_lower
+        or name_lower.endswith(".part")
+    )
+
+
+def _find_completed_path(clip_uuid: str) -> Optional[Path]:
+    """Find the non-temporary, completed output file for clip_uuid in DOWNLOADS_DIR."""
+    expected_path = DOWNLOADS_DIR / f"{clip_uuid}.mp4"
+    if expected_path.exists() and expected_path.stat().st_size > 0 and not _is_temp_file(expected_path):
+        return expected_path
+
+    candidates = [
+        p for p in DOWNLOADS_DIR.glob(f"{clip_uuid}.*")
+        if p.is_file() and p.stat().st_size > 0 and not _is_temp_file(p)
+    ]
+    if candidates:
+        mp4_candidates = [p for p in candidates if p.suffix.lower() == ".mp4"]
+        return mp4_candidates[0] if mp4_candidates else candidates[0]
+
+    return None
+
+
 def download_video(
     url: str, progress_hook: Optional[Callable[[dict], None]] = None
 ) -> Path:
     """Download `url` to downloads/<uuid>.mp4 and return the file path."""
+    import time
+
     if not url or not url.strip():
         raise InvalidVideoURLError("No video URL was provided.")
 
     clip_uuid = uuid.uuid4().hex
     out_template = str(DOWNLOADS_DIR / f"{clip_uuid}.%(ext)s")
-    expected_path = DOWNLOADS_DIR / f"{clip_uuid}.mp4"
+
+    # HD download strategy:
+    # 1. Prefer H.264/AVC 1080p for optimal CPU decoding performance prior to GPU NVENC rendering.
+    # 2. Fall back to any 1080p codec.
+    # 3. Fall back to best video/audio up to 1080p.
+    # 4. Fall back to best available. Max resolution capped at 1080p (no unnecessary 4K downloads).
+    preferred_format = (
+        "bestvideo[height<=1080][vcodec^=avc1]+bestaudio/"
+        "bestvideo[height<=1080]+bestaudio/"
+        "best[height<=1080]/"
+        "bestvideo+bestaudio/"
+        "best"
+    )
 
     base_opts = {
-        "format": "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
+        "format": preferred_format,
         "merge_output_format": "mp4",
         "outtmpl": out_template,
         "noplaylist": True,
@@ -172,17 +214,20 @@ def download_video(
     last_exc: Optional[Exception] = None
     ok = False
     for label, opts in _download_attempts(base_opts):
+        logger.info(
+            "[DOWNLOAD]\nClient: %s\nFormat selector: %s",
+            label, opts.get("format")
+        )
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 ydl.download([url.strip()])
             ok = True
-            if label != "default":
-                logger.info("Downloaded %s using %s", url, label)
+            logger.info("[DOWNLOAD ATTEMPT SUCCESS] Client: %s", label)
             break
         except Exception as exc:  # noqa: BLE001
             last_reason = _clean_ydl_error(str(exc))
             last_exc = exc
-            logger.warning("yt-dlp [%s] failed for %s: %s", label, url, last_reason)
+            logger.warning("[DOWNLOAD ATTEMPT FAILED] Client: %s | Reason: %s", label, last_reason)
             if _is_terminal(last_reason):
                 break
 
@@ -200,17 +245,35 @@ def download_video(
             )
         raise InvalidVideoURLError(msg) from last_exc
 
-    final_path = expected_path if expected_path.exists() else None
-    if not final_path:
-        candidates = sorted(DOWNLOADS_DIR.glob(f"{clip_uuid}.*"))
-        if candidates:
-            final_path = candidates[0]
+    # Atomic completion wait: Poll briefly for temporary files to finish postprocessing/renaming.
+    final_path: Optional[Path] = None
+    for _ in range(15):
+        final_path = _find_completed_path(clip_uuid)
+        if final_path:
+            break
+        time.sleep(0.2)
 
-    if not final_path:
+    if not final_path or _is_temp_file(final_path):
         raise InvalidVideoURLError(
-            "The download completed but no output file was produced. The video may "
-            "be unavailable or region-locked."
+            "The download completed but no valid output file was produced or the file remained incomplete (.part)."
         )
 
-    probe_source_info(final_path)
+    info = probe_source_info(final_path)
+    if not info or info.get("width", 0) == 0:
+        raise InvalidVideoURLError(
+            "The downloaded video file is invalid or corrupt (ffprobe failed to validate streams)."
+        )
+
+    logger.info(
+        "[DOWNLOAD COMPLETE]\nPath: %s\nSize: %.1f MB\nResolution: %dx%d\nCodec: %s",
+        final_path, info.get("size_mb", 0.0), info.get("width", 0), info.get("height", 0), info.get("codec", "unknown")
+    )
+
+    logger.info(
+        "[FFPROBE VALIDATION]\nVideo stream: present (%dx%d, %s, %s fps)\nAudio stream: %s (%s)\nDuration: %.1fs",
+        info.get("width", 0), info.get("height", 0), info.get("codec", "unknown"), info.get("fps", "unknown"),
+        "present" if info.get("audio_codec", "none") != "none" else "absent", info.get("audio_codec", "none"), info.get("duration", 0.0)
+    )
+
     return final_path
+

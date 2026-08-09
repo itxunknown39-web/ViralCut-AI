@@ -263,6 +263,15 @@ def transcribe_video(
     Raises:
         TranscriptionError: on any failure.
     """
+    # Safety guard: Ensure Whisper is NEVER given a temporary .part/.ytdl file
+    path_str = str(video_path).lower()
+    path_name = Path(video_path).name.lower()
+    if path_str.endswith((".part", ".ytdl", ".temp", ".tmp")) or ".part" in path_name:
+        logger.error("TRANSCRIPTION SAFETY GUARD TRIGGERED: Temporary download file received: %s", video_path)
+        raise TranscriptionError("Temporary download file received by transcription pipeline.")
+
+    logger.info("[TRANSCRIPTION INPUT]\nPath: %s\nTemporary file: NO", video_path)
+
     model = load_model(device)
 
     # One transcription at a time. If another is running, surface a clear "waiting"
@@ -270,6 +279,7 @@ def transcribe_video(
     if progress and _transcribe_lock.locked():
         progress(0.0, "Waiting for an earlier transcription to finish…")
     _transcribe_lock.acquire()
+
     try:
         segments_gen, info = model.transcribe(
             str(video_path),

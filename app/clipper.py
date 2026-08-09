@@ -400,10 +400,17 @@ def generate_clip(source_mp4: Path, start: float, end: float, opts: ClipOptions)
     realtime = duration / max(0.001, render_time)
     enc_flags = get_encoder_args()
     active_enc = next((a for a in enc_flags if any(x in a for x in ["nvenc", "libx264", "qsv", "amf"])), "libx264")
+    from . import transcriber
+    gpu = transcriber.gpu_name() or ("NVIDIA GPU (CUDA)" if "nvenc" in active_enc else "CPU")
+    logger.info(
+        "[RENDER]\nEncoder: %s\nGPU: %s\nOutput: %dx%d",
+        active_enc, gpu, width, height
+    )
     logger.info(
         "⚡ Clip %d Rendered: Duration=%.1fs | Time=%.2fs | Realtime=%.2fx | Encoder=%s | Output=%dx%d",
         opts.index, duration, render_time, realtime, active_enc, width, height
     )
 
     return out_path
+
 

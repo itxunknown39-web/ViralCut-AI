@@ -237,7 +237,13 @@ def _run_pipeline(job: Job) -> None:
 
             source_mp4 = downloader.download_video(req.video_url, progress_hook=on_download)
 
+        if not source_mp4 or str(source_mp4).lower().endswith((".part", ".ytdl", ".temp", ".tmp")):
+            raise InvalidVideoURLError("Invalid or temporary download source file.")
+
+        logger.info("[PRETRANSCRIBE INPUT]\nPath: %s", source_mp4)
+
         # 2) Transcribe locally (word timestamps) on the requested device. The
+
         # transcript is keyed by the source file id (its stem), so a transcript
         # prepared in the background (pre-transcription, while the user was still
         # adjusting settings) is reused here and this stage finishes instantly.

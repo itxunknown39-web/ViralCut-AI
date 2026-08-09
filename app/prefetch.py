@@ -109,7 +109,6 @@ def _run(pf: Prefetch) -> None:
         elif status == "finished":
             pf.update(progress=0.99, message="Finalizing download...")
 
-    try:
         path = downloader.download_video(pf.url, progress_hook=hook)
         # The file lives at downloads/<id>.<ext>; its stem is a 32-char hex id the
         # pipeline can resolve exactly like an upload reference.
@@ -119,7 +118,9 @@ def _run(pf: Prefetch) -> None:
             download_id=path.stem,
             message="Video download completed",
         )
+        logger.info("[PREFETCH COMPLETE]\nFinal path: %s", path)
         logger.info("[%s] prefetch done -> %s", pf.id, path.name)
+
     except InvalidVideoURLError as exc:
         logger.warning("[%s] prefetch failed: %s", pf.id, exc)
         pf.update(status="error", error=str(exc), message=str(exc))
