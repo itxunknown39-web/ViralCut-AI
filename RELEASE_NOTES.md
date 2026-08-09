@@ -13,7 +13,10 @@
 
 ## What's new in this build
 
+- **Fixed — HD Video Download & `.part` File Handoff.** Enforced HD video downloads (1080p target max with AVC preference) and resolved temporary `.part`/`.ytdl` file leakage with atomic completion polling, reference filtering, and Faster-Whisper safety guards.
+- **Fixed — prefetch syntax structure.** Repaired syntax error in background prefetch task handler while maintaining full GPU NVENC and Faster-Whisper CUDA pipeline optimizations.
 - **Fixed — cinematic effects combining in export.** Verified end-to-end (frontend payload, backend render, and a full real render through the actual API) that enabling multiple effects together (e.g. Bottom Fade + Glow) sends and renders all of them — none get dropped when another is toggled on.
+
 - **Reworked — Bottom Fade effect.** Replaced the linear opacity ramp with an eased (smoothstep) curve, applied identically in both the live preview and the final render. The result is a soft, photographic falloff with no visible seam or "black bar" edge.
 - **Redesigned editor layout.** CapCut-inspired 3-panel workspace: style/transcript tools on the left, canvas in the center, export & settings on the right, timeline along the bottom.
 - **New — Corner style option.** Square-format clips can now use sharp or rounded corners.

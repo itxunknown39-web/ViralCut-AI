@@ -12,7 +12,8 @@ from pathlib import Path
 
 REMOTE_URL = "https://github.com/itxunknown39-web/ViralCut-AI.git"
 BRANCH = "main"
-COMMIT_MSG = "fix: HD download enforcement (1080p max, AVC preference) and atomic completion .part file handoff fix"
+COMMIT_MSG = "fix(prefetch): fix SyntaxError in prefetch.py try/except structure and preserve HD downloader pipeline"
+
 
 ROOT_DIR = Path(__file__).parent.resolve()
 
