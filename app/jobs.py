@@ -319,16 +319,14 @@ def _run_pipeline(job: Job) -> None:
 
         results: List[dict] = []
         total = len(windows)
-        for index, win in enumerate(windows):
+        completed_count = 0
+        render_lock = threading.Lock()
+
+        def _render_worker(index: int, win: dict) -> Optional[dict]:
+            nonlocal completed_count
             if job.cancelled:
-                logger.info("[%s] cancelled before clip %d", job.id, index)
-                return
+                return None
             start, end = float(win["start"]), float(win["end"])
-            job.set_stage(
-                "rendering",
-                index / total,
-                f"Rendering clip {index + 1} of {total}...",
-            )
 
             clip_words = [w for w in words if w["end"] > start and w["start"] < end]
             ass_path = clip_dir / f"{index}.ass"
@@ -372,8 +370,35 @@ def _run_pipeline(job: Job) -> None:
                 "language": caption_language,
                 "filename": download_filename(title, caption_language, index),
             }
-            results.append(clip)
-            job.add_clip(clip)  # stream the finished clip to the UI immediately
+            with render_lock:
+                completed_count += 1
+                job.set_stage(
+                    "rendering",
+                    completed_count / total,
+                    f"Rendered {completed_count} of {total} clip(s)...",
+                )
+                job.add_clip(clip)
+            return clip
+
+        import concurrent.futures
+        MAX_RENDER_WORKERS = min(2, total)
+        if MAX_RENDER_WORKERS > 1:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_RENDER_WORKERS) as executor:
+                futures = [executor.submit(_render_worker, idx, win) for idx, win in enumerate(windows)]
+                for future in concurrent.futures.as_completed(futures):
+                    res = future.result()
+                    if res:
+                        results.append(res)
+            results.sort(key=lambda c: c["index"])
+        else:
+            for idx, win in enumerate(windows):
+                res = _render_worker(idx, win)
+                if res:
+                    results.append(res)
+
+        if job.cancelled:
+            logger.info("[%s] cancelled during rendering", job.id)
+            return
 
         job.finish(results)
         logger.info("[%s] pipeline complete: %d clips", job.id, len(results))

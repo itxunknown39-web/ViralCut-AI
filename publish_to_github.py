@@ -12,7 +12,7 @@ from pathlib import Path
 
 REMOTE_URL = "https://github.com/itxunknown39-web/ViralCut-AI.git"
 BRANCH = "main"
-COMMIT_MSG = "feat: update Google Colab notebook with live status grid and application log streamer"
+COMMIT_MSG = "feat: optimize rendering pipeline — NVENC/GPU acceleration, bicubic scaling, parallel workers, Colab stress-test tool"
 
 ROOT_DIR = Path(__file__).parent.resolve()
 
