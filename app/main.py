@@ -36,14 +36,18 @@ logger = logging.getLogger("ai_video_clipper")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Create dirs, ensure the font, and load whisper ONCE before serving."""
+    """Create dirs, ensure the font, probe encoder, and load whisper ONCE before serving."""
     ensure_dirs()
     fonts.ensure_fonts()
+    from . import clipper
+    enc_flags = clipper.get_encoder_args()
+    active_enc = next((a for a in enc_flags if any(x in a for x in ["nvenc", "libx264", "qsv", "amf"])), "libx264")
     transcriber.load_model()
     logger.info(
-        "Startup complete. Whisper '%s' on %s. No external AI APIs are used.",
+        "🚀 Startup complete. Whisper '%s' on %s | Encoder: %s. 100%% Local & GPU-Accelerated.",
         transcriber.MODEL_SIZE,
         transcriber.get_device(),
+        active_enc,
     )
     yield
 

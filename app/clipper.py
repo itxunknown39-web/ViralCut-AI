@@ -398,7 +398,12 @@ def generate_clip(source_mp4: Path, start: float, end: float, opts: ClipOptions)
 
     render_time = time.time() - t0
     realtime = duration / max(0.001, render_time)
-    logger.info("✅ Clip %d rendered in %.2fs (%.2fx realtime)", opts.index, render_time, realtime)
+    enc_flags = get_encoder_args()
+    active_enc = next((a for a in enc_flags if any(x in a for x in ["nvenc", "libx264", "qsv", "amf"])), "libx264")
+    logger.info(
+        "⚡ Clip %d Rendered: Duration=%.1fs | Time=%.2fs | Realtime=%.2fx | Encoder=%s | Output=%dx%d",
+        opts.index, duration, render_time, realtime, active_enc, width, height
+    )
 
     return out_path
 

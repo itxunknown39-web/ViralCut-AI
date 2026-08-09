@@ -107,6 +107,44 @@ def _clean_ydl_error(raw: str) -> str:
     return line[:300]
 
 
+def probe_source_info(filepath: Path) -> dict:
+    """Probe video file once and return key stream metadata."""
+    import json, subprocess
+    try:
+        cmd = [
+            "ffprobe", "-v", "quiet", "-print_format", "json",
+            "-show_format", "-show_streams", str(filepath)
+        ]
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=5, creationflags=flags)
+        if proc.returncode == 0:
+            data = json.loads(proc.stdout)
+            streams = data.get("streams", [])
+            fmt = data.get("format", {})
+            v = next((s for s in streams if s.get("codec_type") == "video"), {})
+            a = next((s for s in streams if s.get("codec_type") == "audio"), {})
+            size_mb = filepath.stat().st_size / (1024 * 1024) if filepath.exists() else 0
+            info = {
+                "width": int(v.get("width", 0)),
+                "height": int(v.get("height", 0)),
+                "codec": v.get("codec_name", "unknown"),
+                "fps": v.get("r_frame_rate", "30/1"),
+                "bitrate_kbps": int(fmt.get("bit_rate", 0)) // 1000 if fmt.get("bit_rate") else 0,
+                "audio_codec": a.get("codec_name", "none"),
+                "size_mb": round(size_mb, 1),
+                "duration": float(fmt.get("duration", 0)),
+            }
+            logger.info(
+                "📹 Source Video Probed: %dx%d | Codec=%s | FPS=%s | Audio=%s | Size=%.1fMB | Dur=%.1fs",
+                info["width"], info["height"], info["codec"], info["fps"],
+                info["audio_codec"], info["size_mb"], info["duration"]
+            )
+            return info
+    except Exception as exc:
+        logger.warning("Could not probe source metadata for %s: %s", filepath, exc)
+    return {}
+
+
 def download_video(
     url: str, progress_hook: Optional[Callable[[dict], None]] = None
 ) -> Path:
@@ -162,16 +200,17 @@ def download_video(
             )
         raise InvalidVideoURLError(msg) from last_exc
 
-    if expected_path.exists():
-        return expected_path
+    final_path = expected_path if expected_path.exists() else None
+    if not final_path:
+        candidates = sorted(DOWNLOADS_DIR.glob(f"{clip_uuid}.*"))
+        if candidates:
+            final_path = candidates[0]
 
-    # Some sources may not produce exactly <uuid>.mp4 (e.g. a different
-    # container survived the merge). Fall back to any file with our uuid prefix.
-    candidates = sorted(DOWNLOADS_DIR.glob(f"{clip_uuid}.*"))
-    if candidates:
-        return candidates[0]
+    if not final_path:
+        raise InvalidVideoURLError(
+            "The download completed but no output file was produced. The video may "
+            "be unavailable or region-locked."
+        )
 
-    raise InvalidVideoURLError(
-        "The download completed but no output file was produced. The video may "
-        "be unavailable or region-locked."
-    )
+    probe_source_info(final_path)
+    return final_path
