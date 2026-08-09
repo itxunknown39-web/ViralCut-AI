@@ -381,6 +381,7 @@ def _run_pipeline(job: Job) -> None:
             return clip
 
         import concurrent.futures
+        job.set_stage("rendering", 0.0, f"Rendering 1 of {total} clip(s)...")
         MAX_RENDER_WORKERS = min(2, total)
         if MAX_RENDER_WORKERS > 1:
             with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_RENDER_WORKERS) as executor:

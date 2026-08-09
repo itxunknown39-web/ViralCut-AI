@@ -249,16 +249,21 @@ _cached_encoder_args: Optional[list[str]] = None
 
 def _test_ffmpeg_encoder(v_args: list[str]) -> bool:
     try:
+        # Note: NVENC requires surface sizes >= 128x128. Using s=256x256 to ensure NVENC init succeeds.
         cmd = [
-            "ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=black:s=64x64:d=0.04",
+            "ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=black:s=256x256:d=0.1",
             *v_args, "-frames:v", "1", "-f", "null", "-"
         ]
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         proc = subprocess.run(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=3, creationflags=flags
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10, creationflags=flags
         )
-        return proc.returncode == 0
-    except Exception:
+        if proc.returncode == 0:
+            return True
+        logger.debug("Encoder test failed for %s (exit code %d): %s", " ".join(v_args), proc.returncode, proc.stderr)
+        return False
+    except Exception as exc:
+        logger.debug("Encoder test exception for %s: %s", " ".join(v_args), exc)
         return False
 
 
@@ -269,8 +274,10 @@ def get_encoder_args() -> list[str]:
         return _cached_encoder_args
 
     candidates = [
-        ("NVIDIA NVENC (High Quality)", ["-c:v", "h264_nvenc", "-preset", "p4", "-tune", "hq", "-rc", "vbr", "-cq", "20", "-b:v", "0", "-pix_fmt", "yuv420p"]),
-        ("NVIDIA NVENC", ["-c:v", "h264_nvenc", "-preset", "p4", "-cq", "20", "-b:v", "8M", "-maxrate", "12M", "-bufsize", "16M", "-pix_fmt", "yuv420p"]),
+        ("NVIDIA NVENC (p4 HQ)", ["-c:v", "h264_nvenc", "-preset", "p4", "-cq", "20", "-pix_fmt", "yuv420p"]),
+        ("NVIDIA NVENC (p4 VBR)", ["-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", "20", "-b:v", "0", "-pix_fmt", "yuv420p"]),
+        ("NVIDIA NVENC (medium)", ["-c:v", "h264_nvenc", "-preset", "medium", "-pix_fmt", "yuv420p"]),
+        ("NVIDIA NVENC (default)", ["-c:v", "h264_nvenc", "-pix_fmt", "yuv420p"]),
         ("Intel QSV", ["-c:v", "h264_qsv", "-preset", "veryfast", "-global_quality", "20", "-pix_fmt", "nv12"]),
         ("AMD AMF", ["-c:v", "h264_amf", "-quality", "speed", "-qp_i", "20", "-qp_p", "20", "-pix_fmt", "yuv420p"]),
     ]
