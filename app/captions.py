@@ -15,6 +15,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import List
+import logging
+
+logger = logging.getLogger("ai_video_clipper")
 
 # --------------------------------------------------------------------------- #
 # Style presets — defined ONCE, used for both ASS rendering and the UI preview.
