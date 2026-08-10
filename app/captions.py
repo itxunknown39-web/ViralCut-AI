@@ -444,6 +444,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             dialogue_rows.append(
                 f"Dialogue: 0,{_fmt_time(start)},{_fmt_time(end)},Default,,0,0,0,,{glow_prefix}{glow_text}"
             )
+        dialogue_rows.append(
+            f"Dialogue: {main_layer},{_fmt_time(start)},{_fmt_time(end)},Default,,0,0,0,,{prefix}{text}"
+        )
     sample_dialogue = dialogue_rows[0] if dialogue_rows else "N/A"
     style_line = f"Style: Default,{cfg['font_family']},{font_size},{style_primary},{style_secondary},{outline_col},{back_col},{bold_flag},0,{underline_flag},{strike_flag},100,100,{spacing},0,{border_style},{outline},{shadow},{alignment},60,60,{margin_v},1"
     logger.info(
