@@ -12,7 +12,7 @@ from pathlib import Path
 
 REMOTE_URL = "https://github.com/itxunknown39-web/ViralCut-AI.git"
 BRANCH = "main"
-COMMIT_MSG = "fix(prefetch): fix SyntaxError in prefetch.py try/except structure and preserve HD downloader pipeline"
+COMMIT_MSG = "fix(progress): fix progress stream disconnection with auto-reconnect & SSE/polling fallback, authoritative state, and T4 filter graph optimizations"
 
 
 ROOT_DIR = Path(__file__).parent.resolve()

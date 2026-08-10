@@ -187,10 +187,8 @@ def _build_square_filter_complex(opts: ClipOptions, work_dir: Path) -> str:
     mx, my = (w - s) // 2, (h - s) // 2
 
     stages = [
-        "[0:v]split[base][fg]",
-        f"[base]scale={w}:{h}:force_original_aspect_ratio=increase:flags=bicubic,"
-        f"crop={w}:{h},drawbox=0:0:iw:ih:black:t=fill[bg]",
-        f"[fg]scale={s}:{s}:force_original_aspect_ratio=increase:flags=bicubic,"
+        f"color=c=black:s={w}x{h}[bg]",
+        f"[0:v]scale={s}:{s}:force_original_aspect_ratio=increase:flags=bicubic,"
         f"crop={s}:{s}[fgsq]",
     ]
 

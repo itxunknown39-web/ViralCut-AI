@@ -34,11 +34,31 @@ logging.basicConfig(
 logger = logging.getLogger("ai_video_clipper")
 
 
+def _sync_frontend_dist() -> None:
+    """Ensure compiled React JS bundles in web/dist and static contain the progress stream reconnect fix."""
+    old_js = 'function mh(e,t,n){const r=new EventSource(`/api/progress/${e}`);r.onmessage=l=>{try{t(JSON.parse(l.data))}catch{}},r.onerror=async()=>{r.close();try{const l=await fetch(`/api/result/${e}`);if(l.ok){t(await l.json());return}}catch{}n&&n()},()=>r.close()}'
+    new_js = 'function mh(e,t,n){let r=!1,l=null,o=null,i=0,s=0;function u(d){d&&(typeof d.progress=="number"&&(i=Math.max(i,d.progress),d.progress=i),t(d))}async function c(){if(!r)try{const d=await fetch(`/api/result/${e}`);if(d.ok){s=0;const f=await d.json();if(u(f),["done","error","cancelled"].includes(f.status)){m();return}}else d.status===404?(m(),n&&n(new Error("Job not found."))):s++}catch{s++}if(s>10){m();n&&n(new Error("Lost connection to the progress stream."));return}r||(o=setTimeout(c,1500))}function a(){if(!r)try{l=new EventSource(`/api/progress/${e}`),l.onmessage=d=>{try{const f=JSON.parse(d.data);u(f),["done","error","cancelled"].includes(f.status)&&m()}catch{}},l.onerror=()=>{l&&(l.close(),l=null),!r&&!o&&c()}}catch{!r&&!o&&c()}}fetch(`/api/result/${e}`).then(d=>d.ok?d.json():null).then(d=>{if(!r){if(d&&(u(d),["done","error","cancelled"].includes(d.status)))return;a()}}).catch(()=>{r||a()});function m(){r=!0,l&&(l.close(),l=null),o&&(clearTimeout(o),o=null)}return m}'
+
+    for path in [WEB_DIST_DIR / "assets" / "index--_ZHUUTc.js", STATIC_DIR / "assets" / "index--_ZHUUTc.js"]:
+        if path.is_file():
+            try:
+                text = path.read_text(encoding="utf-8")
+                if old_js in text:
+                    path.write_text(text.replace(old_js, new_js), encoding="utf-8")
+                    logger.info("Updated progress stream reconnect handler in %s", path)
+            except Exception as exc:
+                logger.warning("Could not sync frontend bundle %s: %s", path, exc)
+
+
+_sync_frontend_dist()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Create dirs, ensure the font, probe encoder, and load whisper ONCE before serving."""
     ensure_dirs()
     fonts.ensure_fonts()
+    _sync_frontend_dist()
     from . import clipper
     enc_flags = clipper.get_encoder_args()
     active_enc = next((a for a in enc_flags if any(x in a for x in ["nvenc", "libx264", "qsv", "amf"])), "libx264")
@@ -375,19 +395,30 @@ async def progress(job_id: str) -> StreamingResponse:
 
     async def event_stream():
         last_rev = -1
+        idle_ticks = 0
         while True:
             snap = job.snapshot()
             if snap["rev"] != last_rev:
                 last_rev = snap["rev"]
+                idle_ticks = 0
                 yield f"data: {json.dumps(snap)}\n\n"
-            if snap["status"] in ("done", "error"):
+            else:
+                idle_ticks += 1
+                if idle_ticks >= 10:  # Send keepalive every ~3s if no new revision
+                    idle_ticks = 0
+                    yield ": keepalive\n\n"
+            if snap["status"] in ("done", "error", "cancelled"):
                 break
             await asyncio.sleep(0.3)
 
     return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

@@ -81,20 +81,114 @@ export const api = {
     }),
 };
 
-// Subscribe to a job's Server-Sent Events. Returns a close() fn.
+// Subscribe to a job's Server-Sent Events with automatic HTTP polling fallback. Returns a close() fn.
 export function streamProgress(jobId, onSnap, onError) {
-  const es = new EventSource(`/api/progress/${jobId}`);
-  es.onmessage = (ev) => {
-    try { onSnap(JSON.parse(ev.data)); } catch {}
-  };
-  es.onerror = async () => {
-    es.close();
-    // Fall back to a one-shot result fetch so we don't lose the final state.
+  let closed = false;
+  let es = null;
+  let pollTimer = null;
+  let highestProgress = 0;
+  let consecutiveFailures = 0;
+
+  function safeOnSnap(snap) {
+    if (!snap) return;
+    if (typeof snap.progress === "number") {
+      highestProgress = Math.max(highestProgress, snap.progress);
+      snap.progress = highestProgress;
+    }
+    onSnap(snap);
+  }
+
+  async function pollResult() {
+    if (closed) return;
     try {
       const r = await fetch(`/api/result/${jobId}`);
-      if (r.ok) { onSnap(await r.json()); return; }
-    } catch {}
-    if (onError) onError();
-  };
-  return () => es.close();
+      if (r.ok) {
+        consecutiveFailures = 0;
+        const snap = await r.json();
+        safeOnSnap(snap);
+        if (snap.status === "done" || snap.status === "error" || snap.status === "cancelled") {
+          cleanup();
+          return;
+        }
+      } else if (r.status === 404) {
+        cleanup();
+        if (onError) onError(new Error("Job not found."));
+        return;
+      } else {
+        consecutiveFailures++;
+      }
+    } catch {
+      consecutiveFailures++;
+    }
+
+    if (consecutiveFailures > 10) {
+      cleanup();
+      if (onError) onError(new Error("Lost connection to the progress stream."));
+      return;
+    }
+
+    if (!closed) {
+      pollTimer = setTimeout(pollResult, 1500);
+    }
+  }
+
+  function startSSE() {
+    if (closed) return;
+    try {
+      es = new EventSource(`/api/progress/${jobId}`);
+      es.onmessage = (ev) => {
+        try {
+          const snap = JSON.parse(ev.data);
+          safeOnSnap(snap);
+          if (snap.status === "done" || snap.status === "error" || snap.status === "cancelled") {
+            cleanup();
+          }
+        } catch {}
+      };
+      es.onerror = () => {
+        if (es) {
+          es.close();
+          es = null;
+        }
+        if (!closed && !pollTimer) {
+          pollResult();
+        }
+      };
+    } catch {
+      if (!closed && !pollTimer) {
+        pollResult();
+      }
+    }
+  }
+
+  // Check current status immediately, then start SSE stream
+  fetch(`/api/result/${jobId}`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((snap) => {
+      if (closed) return;
+      if (snap) {
+        safeOnSnap(snap);
+        if (snap.status === "done" || snap.status === "error" || snap.status === "cancelled") {
+          return;
+        }
+      }
+      startSSE();
+    })
+    .catch(() => {
+      if (!closed) startSSE();
+    });
+
+  function cleanup() {
+    closed = true;
+    if (es) {
+      es.close();
+      es = null;
+    }
+    if (pollTimer) {
+      clearTimeout(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  return cleanup;
 }

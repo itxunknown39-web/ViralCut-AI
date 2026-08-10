@@ -121,11 +121,10 @@ def cinematic_stages(
         o = _f(_num(cfg, "glow_strength", 50), 0.35, 0.85)      # bloom opacity
         nxt = f"cine{idx}"
         stages.append(
-            f"[{cur}]format=gbrp,split=2[{nxt}a][{nxt}b];"
-            f"[{nxt}b]curves=all='0/0 0.55/0 0.8/0.55 1/1',scale=iw/2:ih/2,format=gray,format=gbrp,"
+            f"[{cur}]split=2[{nxt}a][{nxt}b];"
+            f"[{nxt}b]curves=all='0/0 0.55/0 0.8/0.55 1/1',scale=iw/2:ih/2,"
             f"gblur=sigma={s:.1f}:steps=2,scale={vw}:{vh}[{nxt}c];"
-            f"[{nxt}a][{nxt}c]blend=all_mode=screen:all_opacity={o:.3f},"
-            f"format=yuv420p[{nxt}]"
+            f"[{nxt}a][{nxt}c]blend=all_mode=screen:all_opacity={o:.3f}[{nxt}]"
         )
         cur, idx = nxt, idx + 1
 

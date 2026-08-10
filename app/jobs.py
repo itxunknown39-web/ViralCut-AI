@@ -83,12 +83,13 @@ class Job:
     def __init__(self, req: GenerateRequest) -> None:
         self.id = uuid.uuid4().hex
         self.req = req
-        self.status = "queued"  # queued | running | done | error
+        self.status = "queued"  # queued | running | done | error | cancelled
         self.stage = "queued"
         self.stage_progress = 0.0  # 0..1 within the current stage
         self.progress = 0.0  # 0..1 overall (derived from stage span)
         self.message = "Queued..."
         self.clips: List[dict] = []
+        self.clips_total = req.num_clips
         self.error: Optional[str] = None
         self.clip_id: Optional[str] = None
         self.cancelled = False
@@ -151,10 +152,13 @@ class Job:
                 "id": self.id,
                 "status": self.status,
                 "stage": self.stage,
+                "phase": self.stage,
                 "stage_progress": round(self.stage_progress, 4),
                 "progress": round(self.progress, 4),
                 "message": self.message,
                 "clips": list(self.clips),
+                "clips_completed": len(self.clips),
+                "clips_total": self.clips_total,
                 "error": self.error,
                 "clip_id": self.clip_id,
                 "rev": self._rev,
@@ -192,13 +196,13 @@ def start_job(job: Job) -> None:
 def _run_pipeline(job: Job) -> None:
     """download -> transcribe -> select -> render, updating `job` throughout."""
     req = job.req
+    job_start_t = time.time()
     logger.info("[%s] starting pipeline: %s", job.id, req.model_dump())
 
     try:
-        # 1) Get the source video. Order of preference:
-        #    a) a file already fetched in the background (prefetch) — instant reuse,
-        #    b) a previously uploaded file,
-        #    c) a fresh URL download.
+        # 1) Get the source video.
+        logger.info("[%s] [DOWNLOAD_START]", job.id)
+        dl_start_t = time.time()
         source_mp4 = None
 
         if req.download_id:
@@ -206,7 +210,6 @@ def _run_pipeline(job: Job) -> None:
                 source_mp4 = uploads.resolve_upload(req.download_id)
                 job.set_stage("downloading", 1.0, "Video already downloaded. Preparing...")
             except InvalidVideoURLError:
-                # Prefetched file vanished — fall back to a normal download below.
                 logger.warning(
                     "[%s] prefetched file %s missing; re-downloading.",
                     job.id,
@@ -240,13 +243,27 @@ def _run_pipeline(job: Job) -> None:
         if not source_mp4 or str(source_mp4).lower().endswith((".part", ".ytdl", ".temp", ".tmp")):
             raise InvalidVideoURLError("Invalid or temporary download source file.")
 
-        logger.info("[PRETRANSCRIBE INPUT]\nPath: %s", source_mp4)
+        dl_dur = time.time() - dl_start_t
+        logger.info("[%s] [DOWNLOAD_COMPLETE] %.2fs", job.id, dl_dur)
 
-        # 2) Transcribe locally (word timestamps) on the requested device. The
+        source_info = downloader.probe_source_info(source_mp4)
+        from . import clipper
+        enc_flags = clipper.get_encoder_args()
+        active_enc = next((a for a in enc_flags if any(x in a for x in ["nvenc", "libx264", "qsv", "amf"])), "libx264")
+        logger.info(
+            "[%s] [SOURCE_METADATA] resolution=%dx%d codec=%s bitrate=%dkbps encoder=%s cuda=%s",
+            job.id,
+            source_info.get("width", 0),
+            source_info.get("height", 0),
+            source_info.get("codec", "unknown"),
+            source_info.get("bitrate_kbps", 0),
+            active_enc,
+            transcriber.cuda_available(),
+        )
 
-        # transcript is keyed by the source file id (its stem), so a transcript
-        # prepared in the background (pre-transcription, while the user was still
-        # adjusting settings) is reused here and this stage finishes instantly.
+        # 2) Transcribe locally
+        logger.info("[%s] [TRANSCRIPTION_START]", job.id)
+        tr_start_t = time.time()
         clip_id = uuid.uuid4().hex
         job.clip_id = clip_id
         source_id = source_mp4.stem
@@ -261,11 +278,6 @@ def _run_pipeline(job: Job) -> None:
                 "transcribing", 1.0, "Using transcript prepared while you set things up..."
             )
         else:
-            # A background pre-transcription (started on Step 2) may already be
-            # running and holding the shared Whisper lock. Rather than freeze the
-            # bar while we block on that lock, mirror the background job's live
-            # progress here so the user sees real movement; once it finishes,
-            # get_or_transcribe returns its cached result instantly.
             running = pretranscribe.find_running(source_id)
             if running is not None:
                 while True:
@@ -288,14 +300,17 @@ def _run_pipeline(job: Job) -> None:
             source_mp4, source_id, req.device.value,
             progress=on_transcribe, language=req.language,
         )
-        # The language the captions are actually in: what the user forced, or
-        # what Whisper detected. Drives the per-clip download filename.
+        tr_dur = time.time() - tr_start_t
+        logger.info("[%s] [TRANSCRIPTION_COMPLETE] %.2fs", job.id, tr_dur)
+
         forced = (req.language or "").strip().lower()
         caption_language = (
             forced if forced and forced != "auto" else transcript.get("language")
         )
 
-        # 3) Select clips (local heuristic, optional local Ollama).
+        # 3) Select clips
+        logger.info("[%s] [ANALYSIS_START]", job.id)
+        an_start_t = time.time()
         job.set_stage("selecting", 0.3, "Analyzing transcript for the best moments...")
         windows = selector.select_clips(transcript, req.num_clips, req.clip_length)
         if not windows:
@@ -303,16 +318,16 @@ def _run_pipeline(job: Job) -> None:
                 "Could not find any suitable clip windows in this video. "
                 "Try a longer video or fewer clips."
             )
+        an_dur = time.time() - an_start_t
+        logger.info("[%s] [ANALYSIS_COMPLETE] %.2fs", job.id, an_dur)
         job.set_stage("selecting", 1.0, f"Found {len(windows)} clip(s) to render.")
 
-        # 4) Per clip: build ASS captions + render with ffmpeg. The caption canvas
-        # must match the actual output frame (1:1 in square mode, aspect otherwise).
+        # 4) Per clip render
         words = transcript.get("words") or []
         caption_overrides = (
             req.caption_overrides.model_dump() if req.caption_overrides else None
         )
         cinematic = req.cinematic.model_dump() if req.cinematic else None
-        # Resolve the background-music track once (None if unset / missing).
         music_path = None
         if req.music_track:
             try:
@@ -325,6 +340,7 @@ def _run_pipeline(job: Job) -> None:
 
         results: List[dict] = []
         total = len(windows)
+        job.clips_total = total
         completed_count = 0
         render_lock = threading.Lock()
 
@@ -332,6 +348,8 @@ def _run_pipeline(job: Job) -> None:
             nonlocal completed_count
             if job.cancelled:
                 return None
+            logger.info("[%s] [RENDER_START] clip=%d", job.id, index + 1)
+            rc_start_t = time.time()
             start, end = float(win["start"]), float(win["end"])
 
             clip_words = [w for w in words if w["end"] > start and w["start"] < end]
@@ -347,7 +365,7 @@ def _run_pipeline(job: Job) -> None:
                 fit_mode=req.fit_mode.value,
             )
 
-            opts = ClipOptions(
+            opts = clipper.ClipOptions(
                 aspect_ratio=req.aspect_ratio,
                 fit_mode=req.fit_mode,
                 square_corners=req.square_corners.value,
@@ -365,6 +383,8 @@ def _run_pipeline(job: Job) -> None:
                 signature=req.signature.model_dump() if req.signature else None,
             )
             generate_clip(source_mp4, start, end, opts)
+            rc_dur = time.time() - rc_start_t
+            logger.info("[%s] [RENDER_COMPLETE] clip=%d %.2fs", job.id, index + 1, rc_dur)
 
             title = win.get("title") or f"Clip {index + 1}"
             clip = {
@@ -386,32 +406,22 @@ def _run_pipeline(job: Job) -> None:
                 job.add_clip(clip)
             return clip
 
-        import concurrent.futures
         job.set_stage("rendering", 0.0, f"Rendering 1 of {total} clip(s)...")
-        MAX_RENDER_WORKERS = min(2, total)
-        if MAX_RENDER_WORKERS > 1:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_RENDER_WORKERS) as executor:
-                futures = [executor.submit(_render_worker, idx, win) for idx, win in enumerate(windows)]
-                for future in concurrent.futures.as_completed(futures):
-                    res = future.result()
-                    if res:
-                        results.append(res)
-            results.sort(key=lambda c: c["index"])
-        else:
-            for idx, win in enumerate(windows):
-                res = _render_worker(idx, win)
-                if res:
-                    results.append(res)
+        # Controlled render queue for single T4 GPU (sequential clip rendering prevents NVENC/VRAM contention)
+        for idx, win in enumerate(windows):
+            res = _render_worker(idx, win)
+            if res:
+                results.append(res)
 
         if job.cancelled:
             logger.info("[%s] cancelled during rendering", job.id)
             return
 
         job.finish(results)
+        total_job_dur = time.time() - job_start_t
+        logger.info("[%s] [TOTAL_JOB_TIME] %.2fs", job.id, total_job_dur)
         logger.info("[%s] pipeline complete: %d clips", job.id, len(results))
 
-        # Persist to history so the History panel survives restarts. Use a
-        # meaningful label: the uploaded file's name, or the source URL.
         if req.upload_id:
             source_label = req.upload_name or "Uploaded file"
             source_type = "upload"
@@ -432,7 +442,7 @@ def _run_pipeline(job: Job) -> None:
                 },
                 clips=results,
             )
-        except Exception:  # noqa: BLE001 - history is best-effort, never fail the job
+        except Exception:  # noqa: BLE001
             logger.warning("[%s] could not write history entry", job.id, exc_info=True)
 
     except InvalidVideoURLError as exc:
@@ -444,6 +454,6 @@ def _run_pipeline(job: Job) -> None:
     except ClipGenerationError as exc:
         logger.warning("[%s] render error: %s", job.id, exc)
         job.fail(str(exc))
-    except Exception as exc:  # noqa: BLE001 - never let a thread die silently
+    except Exception as exc:  # noqa: BLE001
         logger.exception("[%s] unexpected pipeline failure", job.id)
         job.fail(f"Unexpected error: {exc}")

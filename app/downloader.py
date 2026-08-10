@@ -206,6 +206,12 @@ def download_video(
         "quiet": True,
         "no_warnings": True,
         "ignoreerrors": False,
+        "concurrent_fragment_downloads": 4,
+        "retries": 10,
+        "fragment_retries": 10,
+        "socket_timeout": 15,
+        "continuedl": True,
+        "nocheckcertificate": True,
     }
     if progress_hook is not None:
         base_opts["progress_hooks"] = [progress_hook]
