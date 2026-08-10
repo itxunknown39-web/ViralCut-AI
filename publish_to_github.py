@@ -12,7 +12,7 @@ from pathlib import Path
 
 REMOTE_URL = "https://github.com/itxunknown39-web/ViralCut-AI.git"
 BRANCH = "main"
-COMMIT_MSG = "fix(captions): preserve full caption customization state in /api/generate payload and add debug logging"
+COMMIT_MSG = "fix(captions): end-to-end trace and synchronization of caption customization properties across preview, request, backend, and ASS rendering"
 
 
 ROOT_DIR = Path(__file__).parent.resolve()

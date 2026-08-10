@@ -35,20 +35,26 @@ logger = logging.getLogger("ai_video_clipper")
 
 
 def _sync_frontend_dist() -> None:
-    """Ensure compiled React JS bundles in web/dist and static contain the progress stream reconnect fix."""
-    old_js = 'function mh(e,t,n){const r=new EventSource(`/api/progress/${e}`);r.onmessage=l=>{try{t(JSON.parse(l.data))}catch{}},r.onerror=async()=>{r.close();try{const l=await fetch(`/api/result/${e}`);if(l.ok){t(await l.json());return}}catch{}n&&n()},()=>r.close()}'
-    new_js = 'function mh(e,t,n){let r=!1,l=null,o=null,i=0,s=0;function u(d){d&&(typeof d.progress=="number"&&(i=Math.max(i,d.progress),d.progress=i),t(d))}async function c(){if(!r)try{const d=await fetch(`/api/result/${e}`);if(d.ok){s=0;const f=await d.json();if(u(f),["done","error","cancelled"].includes(f.status)){m();return}}else d.status===404?(m(),n&&n(new Error("Job not found."))):s++}catch{s++}if(s>10){m();n&&n(new Error("Lost connection to the progress stream."));return}r||(o=setTimeout(c,1500))}function a(){if(!r)try{l=new EventSource(`/api/progress/${e}`),l.onmessage=d=>{try{const f=JSON.parse(d.data);u(f),["done","error","cancelled"].includes(f.status)&&m()}catch{}},l.onerror=()=>{l&&(l.close(),l=null),!r&&!o&&c()}}catch{!r&&!o&&c()}}fetch(`/api/result/${e}`).then(d=>d.ok?d.json():null).then(d=>{if(!r){if(d&&(u(d),["done","error","cancelled"].includes(d.status)))return;a()}}).catch(()=>{r||a()});function m(){r=!0,l&&(l.close(),l=null),o&&(clearTimeout(o),o=null)}return m}'
-
-    for folder in [WEB_DIST_DIR / "assets", STATIC_DIR / "assets"]:
-        if folder.is_dir():
-            for path in folder.glob("index-*.js"):
-                try:
-                    text = path.read_text(encoding="utf-8")
-                    if old_js in text:
-                        path.write_text(text.replace(old_js, new_js), encoding="utf-8")
-                        logger.info("Updated progress stream reconnect handler in %s", path)
-                except Exception as exc:
-                    logger.warning("Could not sync frontend bundle %s: %s", path, exc)
+    """Ensure compiled React JS bundles in web/dist and static are rebuilt and synchronized."""
+    web_dir = BASE_DIR / "web"
+    dist_dir = web_dir / "dist"
+    static_dir = BASE_DIR / "static"
+    if (web_dir / "package.json").is_file():
+        try:
+            npx_cmd = "npx.cmd" if os.name == "nt" else "npx"
+            res = subprocess.run([npx_cmd, "vite", "build"], cwd=str(web_dir), capture_output=True, text=True, timeout=60)
+            if res.returncode == 0 and dist_dir.exists():
+                static_dir.mkdir(parents=True, exist_ok=True)
+                if (dist_dir / "index.html").is_file():
+                    shutil.copy2(dist_dir / "index.html", static_dir / "index.html")
+                if (dist_dir / "assets").is_dir():
+                    st_assets = static_dir / "assets"
+                    if st_assets.exists():
+                        shutil.rmtree(st_assets)
+                    shutil.copytree(dist_dir / "assets", st_assets)
+                logger.info("Successfully rebuilt and synchronized React bundle web/dist -> static/")
+        except Exception as exc:
+            logger.warning("Could not execute frontend rebuild: %s", exc)
 
 
 _sync_frontend_dist()
@@ -340,6 +346,42 @@ def generate(req: GenerateRequest) -> dict:
     client subscribes to ``/api/progress/{job_id}`` for live progress and the
     final clips.
     """
+    ov = req.caption_overrides.model_dump(exclude_none=True) if req.caption_overrides else {}
+    logger.info(
+        "[BACKEND_REQUEST_CAPTION_CONFIG]\n"
+        "caption_style=%s\n"
+        "primary_color=%s\n"
+        "highlight_color=%s\n"
+        "font_family=%s\n"
+        "font_scale=%s\n"
+        "bold=%s\n"
+        "uppercase=%s\n"
+        "max_lines=%s\n"
+        "max_chars=%s\n"
+        "outline_width=%s\n"
+        "outline_color=%s\n"
+        "position=%s\n"
+        "pos_x=%s\n"
+        "pos_y=%s\n"
+        "tracking=%s\n"
+        "animation=%s",
+        req.caption_style,
+        ov.get("primary_color"),
+        ov.get("highlight_color"),
+        ov.get("font_family"),
+        ov.get("font_scale"),
+        ov.get("bold"),
+        ov.get("uppercase"),
+        ov.get("max_lines"),
+        ov.get("max_chars"),
+        ov.get("outline_width"),
+        ov.get("outline_color"),
+        ov.get("position"),
+        ov.get("pos_x"),
+        ov.get("pos_y"),
+        ov.get("tracking"),
+        ov.get("animation"),
+    )
     job = jobs.create_job(req)
     jobs.start_job(job)
     logger.info("[%s] job accepted", job.id)

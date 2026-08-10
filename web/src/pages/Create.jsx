@@ -269,6 +269,25 @@ export default function Create({ step, setStep }) {
       if (prep.downloadId) payload.download_id = prep.downloadId;
     }
 
+    console.log("[FRONTEND_CAPTION_CONFIG]", {
+      caption_style: studio.styleId,
+      primary_color: capOverrides.primary_color,
+      highlight_color: capOverrides.highlight_color,
+      font_family: capOverrides.font_family,
+      font_scale: capOverrides.font_scale,
+      bold: capOverrides.bold,
+      uppercase: capOverrides.uppercase,
+      max_lines: capOverrides.max_lines,
+      max_chars: capOverrides.max_chars,
+      outline_width: capOverrides.outline_width,
+      outline_color: capOverrides.outline_color,
+      position: capOverrides.position,
+      pos_x: capOverrides.pos_x,
+      pos_y: capOverrides.pos_y,
+      tracking: capOverrides.tracking,
+      animation: capOverrides.animation,
+    });
+
     setBusy(true); setClips([]); setSnap({ stage: "queued", progress: 0.02, message: "Starting…", status: "running" });
     try {
       const { job_id } = await api.generate(payload);
