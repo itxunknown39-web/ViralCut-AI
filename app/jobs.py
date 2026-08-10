@@ -325,7 +325,22 @@ def _run_pipeline(job: Job) -> None:
         # 4) Per clip render
         words = transcript.get("words") or []
         caption_overrides = (
-            req.caption_overrides.model_dump() if req.caption_overrides else None
+            req.caption_overrides.model_dump(exclude_none=True) if req.caption_overrides else {}
+        )
+        preset_cfg = captions.get_preset(req.caption_style)
+        effective_cfg = captions._merge_overrides(preset_cfg, caption_overrides)
+        logger.info(
+            "[%s] [CAPTION_CONFIG]\nstyle=%s\nfont_family=%s\nprimary_color=%s\nhighlight_color=%s\nfont_scale=%s\nanimation=%s\nposition=%s\npos_x=%s\npos_y=%s",
+            job.id,
+            req.caption_style,
+            effective_cfg.get("font_family"),
+            effective_cfg.get("primary_color"),
+            effective_cfg.get("highlight_color"),
+            effective_cfg.get("font_scale"),
+            effective_cfg.get("animation"),
+            effective_cfg.get("position"),
+            effective_cfg.get("pos_x"),
+            effective_cfg.get("pos_y"),
         )
         cinematic = req.cinematic.model_dump() if req.cinematic else None
         music_path = None

@@ -208,6 +208,45 @@ export default function Create({ step, setStep }) {
 
   async function generate() {
     setError("");
+    const capSrc = Object.assign({}, studio.cfg || {}, studio.overrides || {});
+    const capOverrides = {};
+    if (capSrc.font_family != null) capOverrides.font_family = String(capSrc.font_family);
+    if (capSrc.primary_color != null) capOverrides.primary_color = String(capSrc.primary_color);
+    if (capSrc.highlight_color != null) capOverrides.highlight_color = String(capSrc.highlight_color);
+    if (capSrc.font_scale != null) capOverrides.font_scale = Number(capSrc.font_scale);
+    if (capSrc.animation != null) capOverrides.animation = String(capSrc.animation);
+    if (capSrc.position != null) capOverrides.position = String(capSrc.position);
+    if (capSrc.pos_x != null) capOverrides.pos_x = Number(capSrc.pos_x);
+    if (capSrc.pos_y != null) capOverrides.pos_y = Number(capSrc.pos_y);
+    if (capSrc.rotation != null) capOverrides.rotation = Number(capSrc.rotation);
+    if (capSrc.bold != null) capOverrides.bold = Boolean(capSrc.bold);
+    if (capSrc.uppercase != null) capOverrides.uppercase = Boolean(capSrc.uppercase);
+    if (capSrc.underline != null) capOverrides.underline = Boolean(capSrc.underline);
+    if (capSrc.strikethrough != null) capOverrides.strikethrough = Boolean(capSrc.strikethrough);
+    if (capSrc.karaoke != null) capOverrides.karaoke = Boolean(capSrc.karaoke);
+    if (capSrc.tracking != null) capOverrides.tracking = Number(capSrc.tracking);
+    if (capSrc.max_lines != null) capOverrides.max_lines = Number(capSrc.max_lines);
+    if (capSrc.max_chars != null) capOverrides.max_chars = Number(capSrc.max_chars);
+
+    const ow = capSrc.outline_width != null ? capSrc.outline_width : capSrc.outline;
+    if (ow != null) capOverrides.outline_width = Number(ow);
+    if (capSrc.outline_color != null) capOverrides.outline_color = String(capSrc.outline_color);
+
+    const shOn = capSrc.shadow_enabled !== undefined ? Boolean(capSrc.shadow_enabled) : (capSrc.shadow || 0) > 0;
+    capOverrides.shadow_enabled = shOn;
+    const sd = capSrc.shadow_distance != null ? capSrc.shadow_distance : (capSrc.shadow || 0);
+    if (sd != null) capOverrides.shadow_distance = Number(sd);
+    if (capSrc.shadow_color != null) capOverrides.shadow_color = String(capSrc.shadow_color);
+    if (capSrc.shadow_opacity != null) capOverrides.shadow_opacity = Number(capSrc.shadow_opacity);
+
+    if (capSrc.background_enabled != null) capOverrides.background_enabled = Boolean(capSrc.background_enabled);
+    if (capSrc.background_color != null) capOverrides.background_color = String(capSrc.background_color);
+    if (capSrc.background_opacity != null) capOverrides.background_opacity = Number(capSrc.background_opacity);
+
+    if (capSrc.glow_enabled != null) capOverrides.glow_enabled = Boolean(capSrc.glow_enabled);
+    if (capSrc.glow_color != null) capOverrides.glow_color = String(capSrc.glow_color);
+    if (capSrc.glow_intensity != null) capOverrides.glow_intensity = Number(capSrc.glow_intensity);
+
     const payload = {
       aspect_ratio: aspect, fit_mode: fit,
       bar_text: fit === "square" ? (barText.trim() || null) : null,
@@ -215,9 +254,9 @@ export default function Create({ step, setStep }) {
       num_clips: numClips, device, caption_style: studio.styleId,
       language: language === "auto" ? null : language,
       square_corners: squareCorners,
+      caption_overrides: capOverrides,
     };
     if (clipLen != null) payload.clip_length = clipLen;
-    if (Object.keys(studio.overrides).length) payload.caption_overrides = studio.overrides;
     if (cineActive(studio.cinematic)) payload.cinematic = studio.cinematic;
     if (musicTrack) { payload.music_track = musicTrack; payload.music_volume = musicVolume; payload.music_duck = musicDuck; payload.music_start = musicStart; }
     if (signature.enabled && (signature.text || "").trim()) payload.signature = signature;

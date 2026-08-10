@@ -12,7 +12,7 @@ from pathlib import Path
 
 REMOTE_URL = "https://github.com/itxunknown39-web/ViralCut-AI.git"
 BRANCH = "main"
-COMMIT_MSG = "fix(progress): fix progress stream disconnection with auto-reconnect & SSE/polling fallback, authoritative state, and T4 filter graph optimizations"
+COMMIT_MSG = "fix(captions): preserve full caption customization state in /api/generate payload and add debug logging"
 
 
 ROOT_DIR = Path(__file__).parent.resolve()
