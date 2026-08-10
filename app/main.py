@@ -12,9 +12,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import shutil
 import subprocess
 import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -32,6 +35,8 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger("ai_video_clipper")
+
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def _sync_frontend_dist() -> None:

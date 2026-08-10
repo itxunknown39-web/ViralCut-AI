@@ -12,7 +12,7 @@ from pathlib import Path
 
 REMOTE_URL = "https://github.com/itxunknown39-web/ViralCut-AI.git"
 BRANCH = "main"
-COMMIT_MSG = "fix(captions): end-to-end trace and synchronization of caption customization properties across preview, request, backend, and ASS rendering"
+COMMIT_MSG = "fix(startup): define BASE_DIR before _sync_frontend_dist in app/main.py"
 
 
 ROOT_DIR = Path(__file__).parent.resolve()
