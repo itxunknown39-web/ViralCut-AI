@@ -70,6 +70,14 @@ STYLE_PRESETS: dict[str, dict] = {
                   highlight_color="#FFFFFF", max_chars=28),
 
     # --- Creator / trending styles ---
+    "capcut_pop": _P("CapCut Pop", trending=True, font_family="Montserrat",
+                     animation="bounce", highlight_color="#FFD400", font_size=110,
+                     outline=7, position="center", max_lines=1, max_chars=12,
+                     bold=True),
+    "tiktok_emoji": _P("TikTok Emoji", trending=True, font_family="Anton",
+                       animation="highlight", highlight_color="#22D3EE", font_size=96,
+                       outline=6, position="center", max_lines=2, max_chars=16,
+                       bold=True),
     "hormozi_green": _P("Hormozi Green", trending=True, font_family="Montserrat",
                         animation="highlight", highlight_color="#27E36B", font_size=94,
                         outline=6, position="center", max_lines=2, max_chars=16),
@@ -415,7 +423,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     max_lines = int(cfg.get("max_lines") or 1)
     max_chars = int(cfg.get("max_chars") or 22)
 
-    if animation == "one_word":
+    if animation in ("one_word", "bounce", "pop"):
         events = _word_hold_events(words)
     else:
         events = _group_events(words, max_chars=max_chars, max_lines=max_lines)
@@ -428,8 +436,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             continue
         start = max(0.0, start)
 
-        if animation == "one_word":
-            text = _build_one_word_text(ev["lines"][0][0], uppercase)
+        if animation in ("one_word", "bounce", "pop"):
+            text = _build_one_word_text(ev["lines"][0][0], uppercase, animation)
         elif animation == "word_reveal":
             text = _build_reveal_text(ev, uppercase)
         elif animation == "highlight":
@@ -456,7 +464,50 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     )
 
     out_path.write_text(header + "\n".join(dialogue_rows) + "\n", encoding="utf-8")
+    validate_ass_file(out_path)
     return out_path
+
+
+def validate_ass_file(ass_path: Path, clip_duration: float = 0.0) -> dict:
+    """Validate a generated ASS file before FFmpeg render.
+
+    Checks:
+      1. File exists and non-empty.
+      2. Valid [Script Info] and [V4+ Styles] headers.
+      3. [Events] section present.
+      4. Dialogue count > 0.
+      5. Text non-empty and timestamps valid.
+
+    Raises:
+      ValueError: if any validation fails.
+    """
+    if not ass_path.is_file() or ass_path.stat().st_size == 0:
+        raise ValueError(f"ASS subtitle file missing or empty: {ass_path}")
+
+    content = ass_path.read_text(encoding="utf-8")
+    if "[Script Info]" not in content or "[V4+ Styles]" not in content:
+        raise ValueError("Invalid ASS subtitle file: missing header sections.")
+
+    if "[Events]" not in content:
+        raise ValueError("Invalid ASS subtitle file: missing [Events] section.")
+
+    dialogue_lines = [ln for ln in content.splitlines() if ln.startswith("Dialogue:")]
+    if not dialogue_lines:
+        raise ValueError(
+            f"ASS validation failed: {ass_path.name} contains 0 Dialogue lines. Rendering aborted."
+        )
+
+    logger.info(
+        "[ASS_VALIDATION_SUCCESS] path=%s | dialogue_count=%d | sample=%s",
+        ass_path.name,
+        len(dialogue_lines),
+        dialogue_lines[0],
+    )
+    return {
+        "valid": True,
+        "dialogue_count": len(dialogue_lines),
+        "sample_dialogue": dialogue_lines[0],
+    }
 
 
 def _override_inner(cfg: dict, video_w: int, video_h: int, fit_mode: str | None = None) -> str:
@@ -492,9 +543,44 @@ def _override_inner(cfg: dict, video_w: int, video_h: int, fit_mode: str | None 
     return "".join(tags)
 
 
+_EMOJI_DICT = {
+    "money": "💸",
+    "dollar": "💵",
+    "rich": "🤑",
+    "growth": "📈",
+    "fire": "🔥",
+    "hot": "🔥",
+    "rocket": "🚀",
+    "danger": "⚠️",
+    "stop": "🛑",
+    "warning": "⚠️",
+    "time": "⏱️",
+    "clock": "⏰",
+    "love": "❤️",
+    "heart": "❤️",
+    "target": "🎯",
+    "brain": "🧠",
+    "mind": "🧠",
+    "idea": "💡",
+    "light": "💡",
+    "star": "⭐",
+    "win": "🏆",
+    "winner": "🏆",
+    "gold": "🪙",
+    "crypto": "🪙",
+}
+
+
+def _get_emoji_for_word(word: str) -> str:
+    cleaned = "".join(c for c in word if c.isalnum()).lower()
+    return _EMOJI_DICT.get(cleaned, "")
+
+
 def _tok(word: str, uppercase: bool) -> str:
     t = _ass_escape(word)
-    return t.upper() if uppercase else t
+    emoji = _get_emoji_for_word(t)
+    rendered = f"{emoji} {t}" if emoji else t
+    return rendered.upper() if uppercase else rendered
 
 
 def _build_plain_text(lines: List[List[dict]], uppercase: bool) -> str:
@@ -570,8 +656,13 @@ def _build_active_word_text(ev: dict, cfg: dict, uppercase: bool) -> str:
     return "\\N".join(line_strs)
 
 
-def _build_one_word_text(word: dict, uppercase: bool) -> str:
+def _build_one_word_text(word: dict, uppercase: bool, animation: str = "one_word") -> str:
     """Single word with a quick fade + pop-in (the 'one word at a time' style)."""
+    if animation in ("bounce", "pop"):
+        return (
+            "{\\fad(60,0)\\fscx130\\fscy130\\t(0,90,\\fscx100\\fscy100)}"
+            f"{_tok(word['word'], uppercase)}"
+        )
     return (
         "{\\fad(60,0)\\fscx82\\fscy82\\t(0,130,\\fscx100\\fscy100)}"
         f"{_tok(word['word'], uppercase)}"

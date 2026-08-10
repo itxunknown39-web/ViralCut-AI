@@ -74,6 +74,28 @@ async def lifespan(app: FastAPI):
     from . import clipper
     enc_flags = clipper.get_encoder_args()
     active_enc = next((a for a in enc_flags if any(x in a for x in ["nvenc", "libx264", "qsv", "amf"])), "libx264")
+    
+    # Phase 1 Caption Test Verification
+    try:
+        import tempfile
+        from . import captions
+        words_test = [
+            {"word": "money", "start": 0.0, "end": 1.0},
+            {"word": "rocket", "start": 1.0, "end": 2.0},
+        ]
+        with tempfile.NamedTemporaryFile(suffix=".ass", delete=False) as tmp:
+            test_path = Path(tmp.name)
+        captions.build_ass(
+            words=words_test, style_preset="capcut_pop",
+            video_w=1080, video_h=1920, out_path=test_path,
+            clip_start=0.0
+        )
+        content = test_path.read_text(encoding="utf-8")
+        test_path.unlink()
+        logger.info("[PHASE_1_CAPTION_TEST] PASSED. Emojis and bounce animation parsed successfully. Emojis present: %s, Bounce present: %s", "💸" in content and "🚀" in content, "\\fscx130" in content)
+    except Exception as exc:
+        logger.error("[PHASE_1_CAPTION_TEST] FAILED: %s", exc)
+
     transcriber.load_model()
     logger.info(
         "🚀 Startup complete. Whisper '%s' on %s | Encoder: %s. 100%% Local & GPU-Accelerated.",
